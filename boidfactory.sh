@@ -7,7 +7,14 @@ set -euo pipefail
 UUID=$(uuidgen)
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 OUTDIR="runs/boids_$TIMESTAMP"
+
+
 mkdir -p "$OUTDIR"
+if [ -L "runs/latest" ] && [ -d "runs/latest" ]
+then 
+    ln -sfn "$OUTDIR" run/latest 
+fi
+
 
 LOG_FILE="$OUTDIR/run_log.txt"
 
