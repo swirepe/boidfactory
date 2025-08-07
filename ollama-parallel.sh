@@ -121,7 +121,7 @@ mkdir -p "$OUTDIR"
 
 
 echo -e "$0 --model $MODEL --prompt-file $OUTDIR/prompt-$UUID.txt $THINKING_ARG $HIDE_THINKING_ARG\n$MODEL\n$UUID\n\n$(ollama show $MODEL)\n\n$PROMPT\n" | tee "$OUTDIR/log-$UUID.txt"
-echo -e "$PROMPT" | tee "$OUTDIR/prompt-$UUID.txt"
+echo -e "$PROMPT" > "$OUTDIR/prompt-$UUID.txt"
 
 # Export vars for xargs/bash
 export PROMPT MODEL OUTDIR TIMES LOCKFILE UUID HIDE_THINKING_ARG THINKING_ARG EXTENSION
@@ -137,7 +137,7 @@ run_ollama() {
     # Try to acquire the lock without waiting
     if flock -n 200; then
         echo "[INFO] ($i/$TIMES) Running $MODEL → $OUTFILE"
-        ollama run "$MODEL" "$PROMPT" $THINKING_ARG $HIDE_THINKING_ARG| tee "$OUTFILE"
+        time ollama run "$MODEL" "$PROMPT" $THINKING_ARG $HIDE_THINKING_ARG| tee "$OUTFILE"
     else
 
         ollama run "$MODEL" "$PROMPT" $THINKING_ARG $HIDE_THINKING_ARG > "$OUTFILE" 2>/dev/null

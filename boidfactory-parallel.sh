@@ -32,9 +32,7 @@ CODER_MODELS=(
     starcoder2:15b
     mistral-small3.2:24b
     gpt-oss:20b
-    hf.co/unsloth/gpt-oss-20b-GGUF:Q4_K_M
     hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF
-    
 )
 
 # CODER_MODELS=(
@@ -71,7 +69,6 @@ CODER_MODELS=(
 #     hf.co/Qwen/QwQ-32B-GGUF:Q4_K_M
 #     hf.co/Qwen/QwQ-32B-GGUF:Q8_0
 #     codeqwen:7b
-#     hf.co/unsloth/gpt-oss-20b-GGUF:Q4_K_M
 #     hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF
 #     hf.co/unsloth/phi-4-GGUF:Q4_K_M
 # )

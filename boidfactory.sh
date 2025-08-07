@@ -12,7 +12,7 @@ OUTDIR="runs/boids_$TIMESTAMP"
 mkdir -p "$OUTDIR"
 if [ -L "runs/latest" ] && [ -d "runs/latest" ]
 then 
-    ln -sfn "$OUTDIR" run/latest 
+    ln -sfn $(basename "$OUTDIR") runs/latest 
 fi
 
 
@@ -45,20 +45,11 @@ EndOfMessage
 )
 
 ENRICH_PROMPT=$(cat<<- EndOfMessage
-    You are an expert at enhancing creative coding prompts.
-
-    Take the following base prompt and:
-    1. Improve it with additional special rules that will:
-    - Encourage elegant code structure and maintainability
-    - Make visuals highly interactive and reactive
-    - Include accessibility considerations
-    - Include performance optimizations for large numbers of boids
-    - Encourage clear internal documentation
-    - Enhance UX polish, transitions, and animations
-
-    2. Invent ONE entirely new, creative rule that changes the boids' behavior in a surprising and interesting way.
+    Take the following base prompt and invent ONE entirely new, creative rule that changes the boids' behavior in a surprising and interesting way.
     - This rule should be mechanically different from standard boids rules.
     - It should create emergent, unpredictable, and visually compelling results.
+    - It should be fully configurable.
+    - It should be fully documented.
     - Give this rule a short, descriptive name.
 
     Return ONLY the enriched prompt, with all rules (including the new boid behavior rule) clearly integrated into it.
@@ -84,17 +75,21 @@ WRITER_MODELS=(
 )
 #CODER_MODELS=$(echo "$ALL_MODELS" | grep -i -e 'code' -e "granite" || true)
 CODER_MODELS=(
-    qwen3-coder:latest
     deepseek-r1:32b
+    qwen3-coder:latest
+    qwen3:32b
+    starcoder2:15b
+    gpt-oss:20b
     qwq:32b
     gpt-oss:120b
     granite3.3:8b
+    gemma3:27b
     hf.co/ibm-granite/granite-3.3-2b-instruct-GGUF:Q4_K_M
     hf.co/ibm-granite/granite-3.3-2b-instruct-GGUF:Q8_0
     codellama:70b
     codestral:22b
     qwen3:latest
-    starcoder2:15b
+    qwen3:30b
     codestral:latest
     deepseek-coder:6.7b-base
     hf.co/Qwen/Qwen3-32B-GGUF:Q4_K_M
@@ -109,7 +104,6 @@ CODER_MODELS=(
     codellama:7b
     devstral:24b
     deepcoder:1.5b
-    gpt-oss:20b
     deepseek-r1:32b
     hf.co/Qwen/QwQ-32B-GGUF:Q4_K_M
     hf.co/Qwen/QwQ-32B-GGUF:Q8_0
@@ -151,15 +145,18 @@ function run_parallel {
     '
 }
 
-run_parallel
+#run_parallel
 
 for MODEL in "${CODER_MODELS[@]}"; do
+    ollama pull $MODEL
     SAFE_MODEL="${MODEL//\//_}"
     for i in $(seq 5); do
         log "[$i/5]($MODEL) Running from the base prompt..."
         BASE_HTML="$OUTDIR/$SAFE_MODEL-base-$UUID-$i.html"
         ollama run "$MODEL" "$BASE_PROMPT" --hidethinking | tee $BASE_HTML
-        jshint "$BASE_HTML" | tee "$BASE_HTML.jshint"
+        log "[$i/5]($MODEL) Run from base prompt saved to $BASE_HTML"
+        LINT=$(jshint "$BASE_HTML" || true)
+	echo "$LINT" | tee "$BASE_HTML.jshint"
     done
 done
 
