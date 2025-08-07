@@ -14,7 +14,10 @@ Options:
   --model-random          Select a model at random, avoiding embed and reranker models
   --times N               Number of runs (default: 1).
   --parallel N            Number of runs to execute in parallel (default: 2).
-  --output-dir DIR        Directory to save output HTML files (default: ./out).
+  --output-dir DIR        Directory to save output HTML files (default: ./runs).
+  --think=[true|false]     Enable or disable thinking Passed onto ollama.                 
+  --hidethinking          Hide the model's thoughts.  Passed onto ollama.
+  --extension             The file extension to use for the output files (default: txt).
   -h, --help              Show this help message and exit.
 
 Examples:
@@ -24,14 +27,20 @@ EOF
 }
 
 # Default values
+UUID="$(uuidgen)"
 PROMPT="What is love?"
 PROMPT_FILE=""
 MODEL="hf.co/ibm-granite/granite-3.3-2b-instruct-GGUF:Q8_0"
 TIMES=1
 PARALLEL_JOBS=2
 OUTDIR="./runs"
-
+LOCKFILE="/tmp/ollama-tee-$UUID.lock"
+THINKING_ARG="--think=true"
+HIDE_THINKING_ARG=""
+EXTENSION="txt"
 EDITOR="${EDITOR:-vim}"
+
+trap '{ rm -f -- "$LOCKFILE"; }' EXIT
 
 # Parse arguments
 while [[ $# -gt 0 ]]; do
@@ -43,6 +52,18 @@ while [[ $# -gt 0 ]]; do
         --prompt-edit)
             PROMPT_FILE=$(mktemp)
             $EDITOR "$PROMPT_FILE"
+            shift
+            ;;
+	"--think=true")
+	   THINKING_ARG="--think=true"
+	   shift 
+           ;;
+        "--think=false")
+            THINKING_ARG="--think=false"
+            shift
+            ;;
+        --hidethinking)
+            HIDE_THINKING_ARG='--hidethinking'
             shift
             ;;
         --model)
@@ -65,6 +86,8 @@ while [[ $# -gt 0 ]]; do
             PARALLEL_JOBS="$2"; shift 2 ;;
         --output-dir)
             OUTDIR="$2"; shift 2 ;;
+        --extension)
+            EXTENSION="$2"; shift 2 ;;
         -h|--help)
             show_help; exit 0 ;;
         *)
@@ -96,18 +119,30 @@ fi
 
 mkdir -p "$OUTDIR"
 
+
+echo -e "$0 --model $MODEL --prompt-file $OUTDIR/prompt-$UUID.txt $THINKING_ARG $HIDE_THINKING_ARG\n$MODEL\n$UUID\n\n$(ollama show $MODEL)\n\n$PROMPT\n" | tee "$OUTDIR/log-$UUID.txt"
+echo -e "$PROMPT" | tee "$OUTDIR/prompt-$UUID.txt"
+
 # Export vars for xargs/bash
-export PROMPT MODEL OUTDIR TIMES
+export PROMPT MODEL OUTDIR TIMES LOCKFILE UUID HIDE_THINKING_ARG THINKING_ARG EXTENSION
 
 # Function to run one Ollama request
 run_ollama() {
     i="$1"
     SAFE_MODEL="${MODEL//\//_}"
-    UUID="$(uuidgen)"
-    OUTFILE="$OUTDIR/${SAFE_MODEL}-${UUID}-${i}.txt"
+    
+    OUTFILE="$OUTDIR/${SAFE_MODEL}-${UUID}-${i}.$EXTENSION"
 
-    echo "[INFO] ($i/$TIMES) Running $MODEL → $OUTFILE"
-    ollama run "$MODEL" "$PROMPT" --hidethinking > "$OUTFILE"
+    # ollama run "$MODEL" "$PROMPT" --hidethinking > "$OUTFILE"
+    # Try to acquire the lock without waiting
+    if flock -n 200; then
+        echo "[INFO] ($i/$TIMES) Running $MODEL → $OUTFILE"
+        ollama run "$MODEL" "$PROMPT" $THINKING_ARG $HIDE_THINKING_ARG| tee "$OUTFILE"
+    else
+
+        ollama run "$MODEL" "$PROMPT" $THINKING_ARG $HIDE_THINKING_ARG > "$OUTFILE" 2>/dev/null
+        
+    fi 200>"$LOCKFILE"
 }
 
 export -f run_ollama
