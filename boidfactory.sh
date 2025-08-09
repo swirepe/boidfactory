@@ -104,9 +104,9 @@ Output raw HTML only.
 EOM
 )
 
-echo "$MODEL"
-ollama show "$MODEL"
-echo -e "${PROMPT}\n\n----------\n"
+echo "$MODEL" > /dev/stderr
+ollama show "$MODEL" > /dev/stderr
+echo -e "${PROMPT}\n\n----------\n" > /dev/stderr
 echo "$PROMPT" | \
-    ollama run "$MODEL" "$PROMPT_TO_SPEC" | \
+    ollama run "$MODEL" "$PROMPT_TO_SPEC" | tee /dev/stderr | \
     ollama run "$MODEL" "$SPEC_TO_IMPLEMENTATION" 
