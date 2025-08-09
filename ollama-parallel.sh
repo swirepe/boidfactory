@@ -54,9 +54,9 @@ while [[ $# -gt 0 ]]; do
             $EDITOR "$PROMPT_FILE"
             shift
             ;;
-	"--think=true")
-	   THINKING_ARG="--think=true"
-	   shift 
+        "--think=true")
+            THINKING_ARG="--think=true"
+            shift 
            ;;
         "--think=false")
             THINKING_ARG="--think=false"
@@ -129,8 +129,9 @@ export PROMPT MODEL OUTDIR TIMES LOCKFILE UUID HIDE_THINKING_ARG THINKING_ARG EX
 # Function to run one Ollama request
 run_ollama() {
     i="$1"
-    SAFE_MODEL="${MODEL//\//_}"
-    
+    #SAFE_MODEL="${MODEL//\//_}"
+    SAFE_MODEL=$(echo "$MODEL" |  tr '[:/]' _)
+
     OUTFILE="$OUTDIR/${SAFE_MODEL}-${UUID}-${i}.$EXTENSION"
 
     # ollama run "$MODEL" "$PROMPT" --hidethinking > "$OUTFILE"
@@ -143,6 +144,8 @@ run_ollama() {
         ollama run "$MODEL" "$PROMPT" $THINKING_ARG $HIDE_THINKING_ARG > "$OUTFILE" 2>/dev/null
         
     fi 200>"$LOCKFILE"
+
+    
 }
 
 export -f run_ollama
