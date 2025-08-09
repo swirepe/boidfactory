@@ -1,28 +1,11 @@
 #!/usr/bin/env bash
-# Usage: ./boids_pipeline_multi.sh base_prompt.txt
-# Generates enriched prompts, specs, and implementations using multiple Ollama models.
-
 set -euo pipefail
 
-UUID=$(uuidgen)
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
-OUTDIR="runs/boids_$TIMESTAMP"
+MODEL="gpt-oss:20b"
 
 
-mkdir -p "$OUTDIR"
-if [ -L "runs/latest" ] && [ -d "runs/latest" ]
-then 
-    ln -sfn $(basename "$OUTDIR") runs/latest 
-fi
 
-
-LOG_FILE="$OUTDIR/run_log.txt"
-
-function log {
-    echo "[$(date +"%Y-%m-%d %H:%M:%S")] $*" | tee -a "$LOG_FILE"
-}
-
-BASE_PROMPT=$(cat << EndOfMessage
+PROMPT=$(cat << EndOfMessage
 Let's write an beautiful, interactive, highly-configurable and informative boids simulation.
 
 Let's write this as a single page in html, css, and javascript. Let's not use any external libraries.
@@ -40,10 +23,9 @@ Begin immediately with <!DOCTYPE html>.
 Do not wrap the HTML in Markdown code fences.
 Output raw HTML only.
 
-
 EndOfMessage
 )
-
+PROMPT="Write an interactive boids simulation as a single file in html, css, and javascript."
 ENRICH_PROMPT=$(cat<<- EndOfMessage
     Take the following base prompt and invent ONE entirely new, creative rule that changes the boids' behavior in a surprising and interesting way.
     - This rule should be mechanically different from standard boids rules.
@@ -53,167 +35,78 @@ ENRICH_PROMPT=$(cat<<- EndOfMessage
     - Give this rule a short, descriptive name.
 
     Return ONLY the enriched prompt, with all rules (including the new boid behavior rule) clearly integrated into it.
-
-    Base prompt:
-    $BASE_PROMPT
 EndOfMessage
 )
 
 
-
-#ALL_MODELS=$(ollama list | awk 'NR>1 {print $1}' | grep -v "embed" | grep -v "rerank" | grep -v "dcft")
-WRITER_MODELS=(
-    qwen:7b
-    llama3.3:latest
-    llama3.1:8b
-    hf.co/unsloth/gpt-oss-20b-GGUF:F16
-    hf.co/unsloth/gpt-oss-120b-GGUF:F16
-    hf.co/Qwen/QwQ-32B-GGUF:Q4_K_M
-    hf.co/Qwen/QwQ-32B-GGUF:Q8_0
-    command-r-plus:latest
-    deepseek-r1:32b
-)
-#CODER_MODELS=$(echo "$ALL_MODELS" | grep -i -e 'code' -e "granite" || true)
-CODER_MODELS=(
-    deepseek-r1:32b
-    qwen3-coder:latest
-    qwen3:32b
-    starcoder2:15b
-    gpt-oss:20b
-    qwq:32b
-    gpt-oss:120b
-    granite3.3:8b
-    gemma3:27b
-    hf.co/ibm-granite/granite-3.3-2b-instruct-GGUF:Q4_K_M
-    hf.co/ibm-granite/granite-3.3-2b-instruct-GGUF:Q8_0
-    codellama:70b
-    codestral:22b
-    qwen3:latest
-    qwen3:30b
-    codestral:latest
-    deepseek-coder:6.7b-base
-    hf.co/Qwen/Qwen3-32B-GGUF:Q4_K_M
-    qwen2.5-coder:14b
-    qwen2.5-coder:1.5b-base
-    qwen2.5-coder:32b
-    llama3.2:latest
-    hf.co/unsloth/gpt-oss-20b-GGUF:F16
-    hf.co/unsloth/gpt-oss-120b-GGUF:F16
-    deepcoder:14b
-    mistral-small3.2:24b
-    codellama:7b
-    devstral:24b
-    deepcoder:1.5b
-    deepseek-r1:32b
-    hf.co/Qwen/QwQ-32B-GGUF:Q4_K_M
-    hf.co/Qwen/QwQ-32B-GGUF:Q8_0
-    codeqwen:7b
-)
-log "Boids Pipeline Run: $TIMESTAMP" > "$LOG_FILE"
-log "$UUID"
-log "=== Writer Models ==="
-log "${WRITER_MODELS[@]}"
-log
-log "=== Coder Models ==="
-log "${CODER_MODELS[@]}"
-log "=== Base Prompt ==="
-log "$BASE_PROMPT"
-log "==================="
-
-
-function run_parallel {
-    joblist=()
-    for MODEL in "${CODER_MODELS[@]}"; do
-        SAFE_MODEL="${MODEL//\//_}"
-        for i in $(seq 10); do
-            joblist+=("$MODEL::$SAFE_MODEL::$i")
-        done
-    done
-
-    # Export needed vars so parallel can see them
-    export BASE_PROMPT OUTDIR UUID
-    log $(memory_pressure | tail -n 1)
-    # Feed jobs to parallel: 2 at a time until all done
-    printf "%s\n" "${joblist[@]}" | \
-    parallel -j 2 --bar --colsep '::' '
-        MODEL={1}
-        SAFE_MODEL={2}
-        RUNNUM={3}
-
-        ollama run "$MODEL" "$BASE_PROMPT" --hidethinking > "$OUTDIR/${SAFE_MODEL}-base-${UUID}-${RUNNUM}.html"
-        jshint "$OUTDIR/${SAFE_MODEL}-base-${UUID}-${RUNNUM}.html" > "$OUTDIR/${SAFE_MODEL}-base-${UUID}-${RUNNUM}.jshint"
-    '
-}
-
-#run_parallel
-
-for MODEL in "${CODER_MODELS[@]}"; do
-    ollama pull $MODEL
-    SAFE_MODEL="${MODEL//\//_}"
-    for i in $(seq 5); do
-        log "[$i/5]($MODEL) Running from the base prompt..."
-        BASE_HTML="$OUTDIR/$SAFE_MODEL-base-$UUID-$i.html"
-        ollama run "$MODEL" "$BASE_PROMPT" --hidethinking | tee $BASE_HTML
-        log "[$i/5]($MODEL) Run from base prompt saved to $BASE_HTML"
-        LINT=$(jshint "$BASE_HTML" || true)
-	echo "$LINT" | tee "$BASE_HTML.jshint"
-    done
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --prompt)
+            PROMPT="$2"
+            shift 2
+            ;;
+        --prompt-file)
+            PROMPT=$(cat "$2");
+            shift 2 
+            ;;
+        --model)
+            MODEL="$2"
+            shift 2 
+            ;;
+        --model-select)
+            MODEL=$(ollama list | tail -n +2 | sort -k2 -h -r | column -t | \
+            fzf --prompt="Select a model to write this spec: " \
+                --preview-window=right:60%:wrap \
+                --preview='ollama show {1}' \
+                --header="NAME           SIZE    MODIFIED" | awk '{print $1}')
+            shift 1
+            ;;
+        --model-random) 
+            MODEL="$(ollama list | cut -f1 -d' ' | grep -v -e 'embed' -e 'rank' | tail -n+2 | sort -R | head -n1)"
+            shift 1
+            ;;
+        # --output)
+        #     OUTFILE="$2"; shift 2 ;;
+        -h|--help)
+            show_help; exit 0 ;;
+        *)
+            echo "[ERROR] Unknown option: $1" >&2
+            show_help
+            exit 1
+            ;;
+    esac
 done
 
+PROMPT_TO_SPEC=$(cat <<-EOM
+Write a comprehensive spec this prompt.
 
+Core requirements:
+- MUST be a single file containing html, css, and javascript
+- MUST NOT use any external libraries
+- MUST work well on desktop and mobile
+EOM
+)
 
-for MODEL in "${WRITER_MODELS[@]}"; do
-    SAFE_MODEL="${MODEL//\//_}"
-    log "[1/4] ($MODEL) Running from the base prompt..."
-    ollama run "$MODEL" "$(cat $BASE_PROMPT_FILE)" --hidethinking > "$OUTDIR/$SAFE_MODEL-base-$UUID.html"
+SPEC_TO_IMPLEMENTATION=$(cat <<-EOM
+Implement this specification as a single file in html, css, and javascript.
 
-    echo "[2/4] ($MODEL) Enriching prompt..."
-    ENRICH_FILE="$OUTDIR/enriched_prompt_${SAFE_MODEL}-$UUID.txt"
+Core requirements:
+- MUST be a single file containing html, css, and javascript
+- MUST NOT use any external libraries
+- MUST work well on desktop and mobile
 
-    ollama run "$MODEL" "$ENRICH_PROMPT" --hidethinking| tee "$ENRICH_FILE"
-    log "[2/4] ($MODEL) Enriched prompt saved to $ENRICH_FILE"
+Respond only with a COMPLETE, valid HTML5 document.  Include the full implementation.
+Do not include any commentary, explanations, or text outside the HTML tags.
+Begin immediately with <!DOCTYPE html>.
 
+Do not wrap the HTML in Markdown code fences.
+Output raw HTML only.
+EOM
+)
 
-    log "[3/4] ($MODEL) Generating technical spec..."
-    SPEC_FILE="$OUTDIR/spec_${SAFE_MODEL}-$UUID.txt"
-
-read -r -d '' SPEC_PROMPT << EndOfMessage
-You are an expert technical spec writer.
-
-Using the enriched prompt below, create a comprehensive technical specification for the boids simulation.
-Be sure to describe the new boids behavior rule in detail so it can be implemented.
-
-Enriched prompt:
-$(cat "$ENRICH_FILE")
-EndOfMessage
-
-
-    ollama run "$MODEL" "$SPEC_PROMPT" --hidethinking | tee "$SPEC_FILE"
-    log "[3/4] ($MODEL) Technical spec saved to $SPEC_FILE"
-
-read -r -d '' IMPLEMENTATION_PROMPT << EndOfMessage
-You are an expert front-end developer.
-
-Using the technical specification below, implement the boids simulation as a single self-contained HTML file.
-- No external libraries
-- Code must be clean, commented, and production-ready
-- Must meet all requirements in the spec, including the new boid behavior rule
-
-Technical specification:
-$(cat "$SPEC_FILE")
-EndOfMessage
-
-
-    for CODER_MODEL in "${CODER_MODELS[@]}"; do
-        SAFE_CODER="${CODER_MODEL//\//_}"
-        HTML_FILE="$OUTDIR/boids_simulation_spec-${SAFE_MODEL}_coder-${SAFE_CODER}-$UUID.html"
-        log "[4/4] ($CODER_MODEL) Implementing "
-        ollama run "$CODER_MODEL" "$IMPLEMENTATION_PROMPT" --hidethinking | tee "$HTML_FILE"
-        log "[4/4] ($CODER_MODEL) Implementation saved to $HTML_FILE"
-    done
-done
-
-
-log "Done. All results saved in: $OUTDIR"
-log "Log file: $LOG_FILE"
-ls -1 "$OUTDIR"
+echo "$MODEL"
+ollama show "$MODEL"
+echo -e "${PROMPT}\n\n----------\n"
+echo "$PROMPT" | \
+    ollama run "$MODEL" "$PROMPT_TO_SPEC" | \
+    ollama run "$MODEL" "$SPEC_TO_IMPLEMENTATION" 
