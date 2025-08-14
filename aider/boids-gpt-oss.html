@@ -25,9 +25,11 @@
 </div>
 <script>
 (() => {
+  'use strict';
   const canvas = document.getElementById('canvas');
   const ctx = canvas.getContext('2d');
   let width, height;
+
   function resize() {
     width = canvas.width = window.innerWidth;
     height = canvas.height = window.innerHeight;
@@ -35,7 +37,7 @@
   window.addEventListener('resize', resize);
   resize();
 
-  // UI
+  // UI elements
   const boidSlider = document.getElementById('boidSlider');
   const boidCountSpan = document.getElementById('boidCount');
   const speedSlider = document.getElementById('speedSlider');
@@ -43,16 +45,16 @@
 
   boidSlider.addEventListener('input', () => {
     boidCountSpan.textContent = boidSlider.value;
-    initBoids(parseInt(boidSlider.value));
+    initBoids(parseInt(boidSlider.value, 10));
   });
 
   speedSlider.addEventListener('input', () => {
     speedValueSpan.textContent = speedSlider.value;
-    Boid.maxSpeed = parseFloat(speedSlider.value);
+    boidParams.maxSpeed = parseFloat(speedSlider.value);
   });
 
   // Boid parameters
-  const Boid = {
+  const boidParams = {
     maxSpeed: parseFloat(speedSlider.value),
     maxForce: 0.05,
     perceptionRadius: 50,
@@ -61,6 +63,7 @@
     cohesionWeight: 1.0
   };
 
+  // 2D vector utility
   class Vector {
     constructor(x, y) {
       this.x = x;
@@ -76,11 +79,12 @@
     copy() { return new Vector(this.x, this.y); }
   }
 
+  // Boid entity
   class Boid {
     constructor() {
       this.position = new Vector(Math.random() * width, Math.random() * height);
       const angle = Math.random() * Math.PI * 2;
-      this.velocity = new Vector(Math.cos(angle), Math.sin(angle)).mult(Boid.maxSpeed);
+      this.velocity = new Vector(Math.cos(angle), Math.sin(angle)).mult(boidParams.maxSpeed);
       this.acceleration = new Vector(0, 0);
     }
 
@@ -96,7 +100,7 @@
       let total = 0;
       for (const other of boids) {
         const d = this.position.copy().sub(other.position).mag();
-        if (other !== this && d < Boid.perceptionRadius) {
+        if (other !== this && d < boidParams.perceptionRadius) {
           steering.add(other.velocity);
           total++;
         }
@@ -104,9 +108,9 @@
       if (total > 0) {
         steering.div(total);
         steering.normalize();
-        steering.mult(Boid.maxSpeed);
+        steering.mult(boidParams.maxSpeed);
         steering.sub(this.velocity);
-        steering.limit(Boid.maxForce);
+        steering.limit(boidParams.maxForce);
       }
       return steering;
     }
@@ -116,7 +120,7 @@
       let total = 0;
       for (const other of boids) {
         const d = this.position.copy().sub(other.position).mag();
-        if (other !== this && d < Boid.perceptionRadius) {
+        if (other !== this && d < boidParams.perceptionRadius) {
           steering.add(other.position);
           total++;
         }
@@ -125,9 +129,9 @@
         steering.div(total);
         steering.sub(this.position);
         steering.normalize();
-        steering.mult(Boid.maxSpeed);
+        steering.mult(boidParams.maxSpeed);
         steering.sub(this.velocity);
-        steering.limit(Boid.maxForce);
+        steering.limit(boidParams.maxForce);
       }
       return steering;
     }
@@ -137,9 +141,9 @@
       let total = 0;
       for (const other of boids) {
         const d = this.position.copy().sub(other.position).mag();
-        if (other !== this && d < Boid.perceptionRadius / 2) {
+        if (other !== this && d < boidParams.perceptionRadius / 2) {
           const diff = this.position.copy().sub(other.position);
-          diff.div(d * d); // weight by distance
+          diff.div(d * d);
           steering.add(diff);
           total++;
         }
@@ -147,17 +151,17 @@
       if (total > 0) {
         steering.div(total);
         steering.normalize();
-        steering.mult(Boid.maxSpeed);
+        steering.mult(boidParams.maxSpeed);
         steering.sub(this.velocity);
-        steering.limit(Boid.maxForce);
+        steering.limit(boidParams.maxForce);
       }
       return steering;
     }
 
     flock(boids) {
-      const alignment = this.align(boids).mult(Boid.alignmentWeight);
-      const cohesion = this.cohesion(boids).mult(Boid.cohesionWeight);
-      const separation = this.separation(boids).mult(Boid.separationWeight);
+      const alignment = this.align(boids).mult(boidParams.alignmentWeight);
+      const cohesion = this.cohesion(boids).mult(boidParams.cohesionWeight);
+      const separation = this.separation(boids).mult(boidParams.separationWeight);
       this.acceleration.add(alignment);
       this.acceleration.add(cohesion);
       this.acceleration.add(separation);
@@ -166,7 +170,7 @@
     update() {
       this.position.add(this.velocity);
       this.velocity.add(this.acceleration);
-      this.velocity.limit(Boid.maxSpeed);
+      this.velocity.limit(boidParams.maxSpeed);
       this.acceleration.mult(0);
     }
 
@@ -193,7 +197,7 @@
       boids.push(new Boid());
     }
   }
-  initBoids(parseInt(boidSlider.value));
+  initBoids(parseInt(boidSlider.value, 10));
 
   function animate() {
     ctx.clearRect(0, 0, width, height);
