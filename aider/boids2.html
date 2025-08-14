@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Boids Simulation</title>
+<style>
+  html, body { margin:0; padding:0; overflow:hidden; background:#111; }
+  canvas { display:block; width:100vw; height:100vh; }
+</style>
+</head>
+<body>
+<canvas id="boidsCanvas"></canvas>
+<script>
+(() => {
+  const canvas = document.getElementById('boidsCanvas');
+  const ctx = canvas.getContext('2d');
+  const width = canvas.width = window.innerWidth;
+  const height = canvas.height = window.innerHeight;
+
+  const NUM_BOIDS = 120;
+  const MAX_SPEED = 2.5;
+  const MAX_FORCE = 0.05;
+  const NEIGHBOR_DIST = 50;
+  const DESIRED_SEPARATION = 25;
+
+  class Boid {
+    constructor() {
+      this.position = { x: Math.random() * width, y: Math.random() * height };
+      const angle = Math.random() * Math.PI * 2;
+      this.velocity = { x: Math.cos(angle), y: Math.sin(angle) };
+      this.acceleration = { x: 0, y: 0 };
+    }
+
+    applyForce(force) {
+      this.acceleration.x += force.x;
+      this.acceleration.y += force.y;
+    }
+
+    // Separation: steer to avoid crowding local flockmates
+    separate(boids) {
+      let steer = { x: 0, y: 0 };
+      let count = 0;
+      boids.forEach(other => {
+        const d = dist(this.position, other.position);
+        if (d > 0 && d < DESIRED_SEPARATION) {
+          const diff = { x: this.position.x - other.position.x, y: this.position.y - other.position.y };
+          const mag = Math.hypot(diff.x, diff.y);
+          diff.x /= mag;
+          diff.y /= mag;
+          diff.x /= d;
+          diff.y /= d;
+          steer.x += diff.x;
+          steer.y += diff.y;
+          count++;
+        }
+      });
+      if (count > 0) {
+        steer.x /= count;
+        steer.y /= count;
+      }
+      const mag = Math.hypot(steer.x, steer.y);
+      if (mag > 0) {
+        steer.x = (steer.x / mag) * MAX_SPEED - this.velocity.x;
+        steer.y = (steer.y / mag) * MAX_SPEED - this.velocity.y;
+        const steerMag = Math.hypot(steer.x, steer.y);
+        if (steerMag > MAX_FORCE) {
+          steer.x = (steer.x / steerMag) * MAX_FORCE;
+          steer.y = (steer.y / steerMag) * MAX_FORCE;
+        }
+      }
+      return steer;
+    }
+
+    // Alignment: steer towards average heading of local flockmates
+    align(boids) {
+      let sum = { x: 0, y: 0 };
+      let count = 0;
+      boids.forEach(other => {
+        const d = dist(this.position, other.position);
+        if (d > 0 && d < NEIGHBOR_DIST) {
+          sum.x += other.velocity.x;
+          sum.y += other.velocity.y;
+          count++;
+        }
+      });
+      if (count > 0) {
+        sum.x /= count;
+        sum.y /= count;
+        const mag = Math.hypot(sum.x, sum.y);
+        if (mag > 0) {
+          sum.x = (sum.x / mag) * MAX_SPEED;
+          sum.y = (sum.y / mag) * MAX_SPEED;
+          const steer = { x: sum.x - this.velocity.x, y: sum.y - this.velocity.y };
+          const steerMag = Math.hypot(steer.x, steer.y);
+          if (steerMag > MAX_FORCE) {
+            steer.x = (steer.x / steerMag) * MAX_FORCE;
+            steer.y = (steer.y / steerMag) * MAX_FORCE;
+          }
+          return steer;
+        }
+      }
+      return { x: 0, y: 0 };
+    }
+
+    // Cohesion: steer to move toward average position of local flockmates
+    cohesion(boids) {
+      let sum = { x: 0, y: 0 };
+      let count = 0;
+      boids.forEach(other => {
+        const d = dist(this.position, other.position);
+        if (d > 0 && d < NEIGHBOR_DIST) {
+          sum.x += other.position.x;
+          sum.y += other.position.y;
+          count++;
+        }
+      });
+      if (count > 0) {
+        sum.x /= count;
+        sum.y /= count;
+        return this.seek(sum);
+      }
+      return { x: 0, y: 0 };
+    }
+
+    // A method that calculates and applies a steering force towards a target
+    seek(target) {
+      const desired = { x: target.x - this.position.x, y: target.y - this.position.y };
+      const d = Math.hypot(desired.x, desired.y);
+      if (d > 0) {
+        desired.x = (desired.x / d) * MAX_SPEED;
+        desired.y = (desired.y / d) * MAX_SPEED;
+        const steer = { x: desired.x - this.velocity.x, y: desired.y - this.velocity.y };
+        const steerMag = Math.hypot(steer.x, steer.y);
+        if (steerMag > MAX_FORCE) {
+          steer.x = (steer.x / steerMag) * MAX_FORCE;
+          steer.y = (steer.y / steerMag) * MAX_FORCE;
+        }
+        return steer;
+      }
+      return { x: 0, y: 0 };
+    }
+
+    update(boids) {
+      const sep = this.separate(boids);
+      const ali = this.align(boids);
+      const coh = this.cohesion(boids);
+
+      // Arbitrary weights for each behavior
+      sep.x *= 1.5; sep.y *= 1.5;
+      ali.x *= 1.0; ali.y *= 1.0;
+      coh.x *= 1.0; coh.y *= 1.0;
+
+      this.applyForce(sep);
+      this.applyForce(ali);
+      this.applyForce(coh);
+
+      this.velocity.x += this.acceleration.x;
+      this.velocity.y += this.acceleration.y;
+
+      // Limit speed
+      const speed = Math.hypot(this.velocity.x, this.velocity.y);
+      if (speed > MAX_SPEED) {
+        this.velocity.x = (this.velocity.x / speed) * MAX_SPEED;
+        this.velocity.y = (this.velocity.y / speed) * MAX_SPEED;
+      }
+
+      this.position.x += this.velocity.x;
+      this.position.y += this.velocity.y;
+
+      // Wrap around edges
+      if (this.position.x < 0) this.position.x += width;
+      if (this.position.y < 0) this.position.y += height;
+      if (this.position.x > width) this.position.x -= width;
+      if (this.position.y > height) this.position.y -= height;
+
+      this.acceleration.x = 0;
+      this.acceleration.y = 0;
+    }
+
+    draw() {
+      const theta = Math.atan2(this.velocity.y, this.velocity.x);
+      ctx.save();
+      ctx.translate(this.position.x, this.position.y);
+      ctx.rotate(theta);
+      ctx.beginPath();
+      ctx.moveTo(0, -5);
+      ctx.lineTo(-10, 5);
+      ctx.lineTo(10, 5);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(200, 200, 255, 0.8)';
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function dist(a, b) {
+    return Math.hypot(a.x - b.x, a.y - b.y);
+  }
+
+  const boids = [];
+  for (let i = 0; i < NUM_BOIDS; i++) {
+    boids.push(new Boid());
+  }
+
+  function animate() {
+    ctx.clearRect(0, 0, width, height);
+    boids.forEach(b => {
+      b.update(boids);
+      b.draw();
+    });
+    requestAnimationFrame(animate);
+  }
+
+  animate();
+
+  window.addEventListener('resize', () => {
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+  });
+})();
+</script>
+</body>
+</html>
