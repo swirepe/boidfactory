@@ -5,6 +5,7 @@ import html
 import urllib.parse
 import re
 import argparse
+import base64
 from pathlib import Path
 
 def setup_arg_parser():
@@ -69,39 +70,58 @@ def main():
 
     folder_links = []
     file_links = []
+    
+    # SVG icon for download button
+    download_icon_svg = (
+        '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" '
+        'viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" '
+        'stroke-linecap="round" stroke-linejoin="round" class="feather feather-download">'
+        '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>'
+        '<polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'
+        '</svg>'
+    )
 
     for f in files_to_link:
         rel_path = f.relative_to(root_dir)
         href = urllib.parse.quote(rel_path.as_posix())
 
+        # Create the download link with base64 encoded content
+        try:
+            file_content = f.read_bytes()
+            b64_content = base64.b64encode(file_content).decode('ascii')
+            data_uri = f"data:text/html;charset=utf-8;base64,{b64_content}"
+            download_filename = html.escape(f.name)
+            download_link = (
+                f'<a href="{data_uri}" download="{download_filename}" class="download-btn" '
+                f'title="Download {download_filename}">{download_icon_svg}</a>'
+            )
+        except (IOError, OSError) as e:
+            print(f"Warning: Could not create download link for {f}: {e}", file=sys.stderr)
+            download_link = "" # Don't show button if file can't be read
+
         if f.name.lower() in ('index.html', 'index.htm'):
             folder_name = f.parent.name if f.parent != root_dir else f"{root_dir.name} (Root)"
             data_title = html.escape(folder_name)
             data_filename = html.escape(rel_path.as_posix())
-            
-            # The initially displayed label is the folder name.
             display_label = data_title
-
+            
             html_string = (
                 f'      <li data-title="{data_title}" data-filename="{data_filename}">'
                 f'<a href="{href}" target="_blank" rel="noopener noreferrer">'
-                f'📂 <strong>{display_label}</strong></a></li>'
+                f'📂 <strong>{display_label}</strong></a>{download_link}</li>'
             )
             folder_links.append((display_label.lower(), html_string))
         else:
             page_title = extract_title(f)
             relative_filename = rel_path.as_posix()
-            
             data_title = page_title
             data_filename = html.escape(relative_filename)
-
-            # The initially displayed label is the page title.
             display_label = data_title
             
             html_string = (
                 f'      <li data-title="{data_title}" data-filename="{data_filename}">'
                 f'<a href="{href}" target="viewer">'
-                f'<strong>{display_label}</strong></a></li>'
+                f'<strong>{display_label}</strong></a>{download_link}</li>'
             )
             file_links.append((display_label.lower(), html_string))
 
