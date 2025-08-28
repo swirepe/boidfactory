@@ -275,7 +275,7 @@
           vx[i]+=clamp(sx+cx+ax, -MF, MF); vy[i]+=clamp(sy+cy+ay, -MF, MF);
         }
         // Flow field
-        if (CFG.flow){ const v=perlinVec(x[i]*0.01+flowT, y[i]*0.01-flowT, CFG.flowScale, CFG.flowAmp); vx[i]+=v[0]; vy[i]+=v[1]; }
+        if (CFG.flow){ const v=flowVec(x[i], y[i], 1); vx[i]+=v[0]; vy[i]+=v[1]; }
         
         // Mouse attract/repel
         if (mouseDown){
@@ -308,8 +308,13 @@
     function wrapCoord(v, max){ v = v % max; if (v < 0) v += max; return v; }
 
     let last=performance.now(); let frames=0; let acc=0; let flowT=0;
+    let _prevHeader=null, _prevSubheader=null, _prevHud=null;
     function render(ts){
       const dt = (ts-last)/1000; last=ts; frames++; acc+=dt; if (acc>0.5){ hudEl.textContent = `FPS: ${Math.round(frames/acc)}`; frames=0; acc=0; }
+      // Apply overlay visibility toggles
+      const sh = !!CFG.showHeader; if (_prevHeader!==sh){ titleEl.style.display = sh ? '' : 'none'; _prevHeader=sh; }
+      const ss = !!CFG.showSubheader; const hasSub = !!(SUBHEADER||''); if (_prevSubheader !== (ss&&hasSub)){ subtitleEl.style.display = (ss&&hasSub) ? '' : 'none'; _prevSubheader = (ss&&hasSub); }
+      const hd = !!CFG.showHud; if (_prevHud!==hd){ hudEl.style.display = hd ? '' : 'none'; _prevHud=hd; }
       // Clear/fade background in normal compose so it doesn't brighten
       const prevOp = ctx.globalCompositeOperation;
       ctx.globalCompositeOperation='source-over';
@@ -382,10 +387,10 @@
 
     // URL overrides for config (parity with Python script)
     (function urlOverride(){
-      const intKeys = ['count','vision','sep','qtCap','bgHueShift1','bgHueShift2','bgHueShift3'];
-      const numKeys = ['maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','glowBase','glowMax','glowScale','cometSize','flowAmp','flowScale','flowSpeed','flowVizStep'];
-      const boolKeys = ['wrap','bgGradient','qt','flow','flowViz','showHud'];
-      const strKeys = ['shape','blend','spawn'];
+      const intKeys = ['count','vision','sep','qtCap','bgHueShift1','bgHueShift2','bgHueShift3','flowOctaves'];
+      const numKeys = ['maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','glowBase','glowMax','glowScale','cometSize','flowAmp','flowScale','flowSpeed','flowVizStep','flowAmpVar','flowAniso'];
+      const boolKeys = ['wrap','bgGradient','qt','flow','flowViz','showHud','showHeader','showSubheader'];
+      const strKeys = ['shape','blend','spawn','flowMode'];
       for (const k of intKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Math.max(-99999, Math.min(99999, parseInt(v))); }
       for (const k of numKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Number(v); }
       for (const k of boolKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = (String(v).toLowerCase()==='true' || String(v)==='1'); }
@@ -402,8 +407,8 @@
         'count','vision','sep','maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','wrap',
         'bgGradient','bgHueShift1','bgHueShift2','bgHueShift3',
         'qt','qtCap',
-        'flow','flowAmp','flowScale','flowSpeed','flowViz','flowVizStep',
-        'shape','blend','spawn','showHud'
+        'flow','flowAmp','flowScale','flowSpeed','flowViz','flowVizStep','flowAmpVar','flowAniso','flowOctaves','flowMode',
+        'shape','blend','spawn','showHud','showHeader','showSubheader'
       ];
       for (const k of keys) { if (CFG[k] !== undefined) url.searchParams.set(k, String(CFG[k])); }
       for (const [k,v] of Object.entries(extra)) url.searchParams.set(k, v);
@@ -419,10 +424,10 @@
       document.documentElement.style.setProperty('--accent', `hsl(${BASE_HUE} 80% 60%)`);
       buildConfigUI();
       const cfgEl = document.getElementById('config');
-      document.getElementById('cfgBtn').onclick = ()=>{ openConfig(cfgEl); };
+      document.getElementById('cfgBtn').onclick = ()=>{ cfgEl.classList.contains('open') ? closeConfig(cfgEl) : openConfig(cfgEl); };
       document.getElementById('cfgClose').onclick = ()=>{ closeConfig(cfgEl); };
       const helpEl = document.getElementById('help');
-      document.getElementById('helpBtn').onclick = ()=>{ openConfig(helpEl); };
+      document.getElementById('helpBtn').onclick = ()=>{ helpEl.classList.contains('open') ? closeConfig(helpEl) : openConfig(helpEl); };
       document.getElementById('helpClose').onclick = ()=>{ closeConfig(helpEl); };
     })();
 
@@ -468,6 +473,8 @@
       addRange('Line width', 'lineWidth', 0.2, 6, 0.1);
       addRange('Trail alpha', 'trailAlpha', 0.0, 0.5, 0.01);
       addCheck('Wrap', 'wrap');
+      addCheck('Show header', 'showHeader');
+      addCheck('Show subheader', 'showSubheader');
       addCheck('Background gradient', 'bgGradient');
       addRange('BG hue shift 1', 'bgHueShift1', 0, 360, 1, true);
       addRange('BG hue shift 2', 'bgHueShift2', 0, 360, 1, true);
@@ -480,7 +487,8 @@
       addRange('Flow scale', 'flowScale', 0.0005, 0.02, 0.0005);
       addRange('Flow speed', 'flowSpeed', 0, 3, 0.05);
       addRange('Flow grid size', 'flowVizStep', 12, 200, 4, true);
-
+      addRange('Flow amp variation', 'flowAmpVar', 0, 1, 0.05);
+      addRange('Flow anisotropy (Y)', 'flowAniso', -0.9, 3, 0.1);
       const addSelect = (label, key, options)=>{
         const row = document.createElement('div'); row.className='row';
         const l = document.createElement('label'); l.textContent = label;
@@ -490,6 +498,8 @@
         sel.addEventListener('change', ()=>{ CFG[key]=sel.value; updateUrlFromCfg(); });
         row.appendChild(l); row.appendChild(sel); root.appendChild(row);
       };
+      addSelect('Flow mode', 'flowMode', ['angle','curl','turbulence']);
+      addRange('Flow octaves', 'flowOctaves', 1, 6, 1, true);
 
       addSelect('Blend', 'blend', ['lighter','plus-lighter','screen','source-over']);
       addSelect('Shape', 'shape', ['trail','triangle','dot','comet','ring']);
@@ -539,7 +549,7 @@
       ctx.lineWidth = 1;
       for (let yy=0; yy<=innerHeight; yy+=s){
         for (let xx=0; xx<=innerWidth; xx+=s){
-          const v = perlinVec(xx*0.01+flowT, yy*0.01-flowT, CFG.flowScale, 1);
+          const v = flowVec(xx, yy, 1);
           const l = Math.hypot(v[0], v[1]) || 1;
           const dx = v[0]/l, dy = v[1]/l;
           const L = Math.max(6, s*0.35);
@@ -569,6 +579,38 @@
     function _rand(ix, iy){ const k = ((ix|0) * 374761393 + (iy|0) * 668265263 + noiseSeed) >>> 0; return fract(Math.sin(k) * 43758.5453); }
     function noise2(x, y){ const xi = Math.floor(x), yi = Math.floor(y); const xf = x - xi, yf = y - yi; const u = xf*xf*(3-2*xf), v = yf*yf*(3-2*yf); const v00 = _rand(xi, yi), v10 = _rand(xi+1, yi), v01 = _rand(xi, yi+1), v11 = _rand(xi+1, yi+1); const x1 = v00*(1-u) + v10*u, x2 = v01*(1-u) + v11*u; return x1*(1-v) + x2*v; }
     function perlinVec(x, y, scale, amp){ const n = noise2(x*scale, y*scale); const a = n * Math.PI*2; return [Math.cos(a)*amp, Math.sin(a)*amp]; }
+    // Advanced flow vector with modes and non-uniform variation
+    function flowVec(x, y, ampMul){
+      const s = Math.max(1e-6, Number(CFG.flowScale)||0.001);
+      const sy = s * (1 + Number(CFG.flowAniso||0));
+      const mode = String(CFG.flowMode||'angle').toLowerCase();
+      let vx=0, vy=0;
+      if (mode === 'curl'){
+        const nx = (x+flowT*60)*s, ny=(y-flowT*60)*sy;
+        const e = 1.2; // step in noise space
+        const dny = noise2(nx, ny+e) - noise2(nx, ny-e);
+        const dnx = noise2(nx+e, ny) - noise2(nx-e, ny);
+        vx = dny; vy = -dnx; // perpendicular of gradient
+        const l = Math.hypot(vx,vy)||1; vx/=l; vy/=l;
+      } else if (mode === 'turbulence'){
+        let nx = (x+flowT*60)*s, ny=(y-flowT*60)*sy;
+        let amp=1, freq=1, sx=0, syy=0; const oct=Math.max(1,Math.min(6,(CFG.flowOctaves|0)||3));
+        for(let o=0;o<oct;o++){
+          const n = noise2(nx*freq, ny*freq); const a = n*Math.PI*2; sx += Math.cos(a)*amp; syy += Math.sin(a)*amp; amp*=0.5; freq*=2;
+        }
+        const l = Math.hypot(sx,syy)||1; vx=sx/l; vy=syy/l;
+      } else {
+        const n = noise2((x+flowT*60)*s, (y-flowT*60)*sy); const a = n*Math.PI*2; vx=Math.cos(a); vy=Math.sin(a);
+      }
+      // amplitude modulation
+      let amp = Number(CFG.flowAmp||0) * (ampMul||1);
+      const varAmt = Number(CFG.flowAmpVar||0);
+      if (varAmt>0){
+        const nv = noise2((x+123.4+flowT*30)*(s*1.2), (y-99.7-flowT*30)*(sy*1.2));
+        amp *= (1 + (nv*2-1)*varAmt);
+      }
+      return [vx*amp, vy*amp];
+    }
 
     </script>
   </body>

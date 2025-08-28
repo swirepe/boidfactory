@@ -39,6 +39,14 @@ type Config struct {
     // Visualization of the flow field
     FlowViz     bool
     FlowVizStep int
+    // Advanced flow configuration
+    FlowMode    string  // angle | curl | turbulence
+    FlowAmpVar  float64 // 0..1 amplitude variation
+    FlowAniso   float64 // -0.9..3 anisotropy factor on Y scale
+    FlowOctaves int     // for turbulence
+    // Overlay visibility
+    ShowHeader     bool
+    ShowSubheader  bool
     ShowHud     bool
     Shape       string
     Blend       string
@@ -75,6 +83,12 @@ func defaultConfig(r *rand.Rand) Config {
         FlowSpeed:   0.4 + r.Float64()*1.0,
         FlowViz:     false,
         FlowVizStep: 56 + r.IntN(40),
+        FlowMode:    []string{"angle","curl","turbulence"}[r.IntN(3)],
+        FlowAmpVar:  r.Float64()*0.5,
+        FlowAniso:   (r.Float64()*0.6) - 0.2, // slightly anisotropic by default
+        FlowOctaves: 1 + r.IntN(4),
+        ShowHeader:  true,
+        ShowSubheader: true,
         ShowHud:     true,
         Shape:       shapes[r.IntN(len(shapes))],
         Blend:       blends[r.IntN(len(blends))],
@@ -129,6 +143,12 @@ func Generate(seedStr, header, subheader string) (string, error) {
         "CfgFlowSpeed": cfg.FlowSpeed,
         "CfgFlowViz":   cfg.FlowViz,
         "CfgFlowVizStep": cfg.FlowVizStep,
+        "CfgFlowMode":   cfg.FlowMode,
+        "CfgFlowAmpVar": cfg.FlowAmpVar,
+        "CfgFlowAniso":  cfg.FlowAniso,
+        "CfgFlowOctaves": cfg.FlowOctaves,
+        "CfgShowHeader":  cfg.ShowHeader,
+        "CfgShowSubheader": cfg.ShowSubheader,
         "CfgShowHud":   cfg.ShowHud,
         "CfgShape":     cfg.Shape,
         "CfgBlend":     cfg.Blend,
@@ -186,6 +206,10 @@ func executeTemplate(tpl string, data map[string]any) (string, error) {
     repl("CfgFlowScale", fmt.Sprint(data["CfgFlowScale"]))
     repl("CfgFlowSpeed", fmt.Sprint(data["CfgFlowSpeed"]))
     repl("CfgFlowVizStep", fmt.Sprint(data["CfgFlowVizStep"]))
+    repl("CfgFlowMode", fmt.Sprint(data["CfgFlowMode"]))
+    repl("CfgFlowAmpVar", fmt.Sprint(data["CfgFlowAmpVar"]))
+    repl("CfgFlowAniso", fmt.Sprint(data["CfgFlowAniso"]))
+    repl("CfgFlowOctaves", fmt.Sprint(data["CfgFlowOctaves"]))
     repl("CfgShape", fmt.Sprint(data["CfgShape"]))
     repl("CfgBlend", fmt.Sprint(data["CfgBlend"]))
     repl("CfgSpawn", fmt.Sprint(data["CfgSpawn"]))
@@ -195,6 +219,8 @@ func executeTemplate(tpl string, data map[string]any) (string, error) {
     if data["CfgQt"].(bool) { repl("CfgQt", "true") } else { repl("CfgQt", "false") }
     if data["CfgFlow"].(bool) { repl("CfgFlow", "true") } else { repl("CfgFlow", "false") }
     if data["CfgFlowViz"].(bool) { repl("CfgFlowViz", "true") } else { repl("CfgFlowViz", "false") }
+    if data["CfgShowHeader"].(bool) { repl("CfgShowHeader", "true") } else { repl("CfgShowHeader", "false") }
+    if data["CfgShowSubheader"].(bool) { repl("CfgShowSubheader", "true") } else { repl("CfgShowSubheader", "false") }
     if data["CfgShowHud"].(bool) { repl("CfgShowHud", "true") } else { repl("CfgShowHud", "false") }
     return out, nil
 }
