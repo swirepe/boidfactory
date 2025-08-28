@@ -201,11 +201,11 @@
     let paletteHue = BASE_HUE;
 
     // Boid state
-    const N = CFG.count;
-    const x = new Float32Array(N), y = new Float32Array(N), vx = new Float32Array(N), vy = new Float32Array(N);
-    const sz = new Float32Array(N); // per-boid size scalar
+    let N = CFG.count;
+    let x = new Float32Array(N), y = new Float32Array(N), vx = new Float32Array(N), vy = new Float32Array(N);
+    let sz = new Float32Array(N); // per-boid size scalar
     // Spawn patterns for variety
-    (function spawnBoids(){
+    function spawnBoids(){
       const sp = (CFG.spawn||'random').toLowerCase();
       const cx=innerWidth*0.5, cy=innerHeight*0.5; const R=Math.min(innerWidth, innerHeight)*0.38;
       const gridN = Math.ceil(Math.sqrt(N));
@@ -235,13 +235,39 @@
         vx[i] = Math.cos(a)*s; vy[i] = Math.sin(a)*s;
         sz[i] = 0.7 + rand(0, 1.6); // varied size per boid
       }
-    })();
+    }
+    spawnBoids();
+
+    function setBoidCount(newN){
+      newN = Math.max(1, Math.min(5000, Math.floor(newN)));
+      if (newN === N) return;
+      const nx = new Float32Array(newN), ny = new Float32Array(newN), nvx = new Float32Array(newN), nvy = new Float32Array(newN), nsz = new Float32Array(newN);
+      const m = Math.min(N, newN);
+      for (let i=0;i<m;i++){ nx[i]=x[i]; ny[i]=y[i]; nvx[i]=vx[i]; nvy[i]=vy[i]; nsz[i]=sz[i]; }
+      x=nx; y=ny; vx=nvx; vy=nvy; sz=nsz; N=newN;
+      // respawn newly added
+      if (newN>m){ const oldN=m; const prevN=N; const tmpN=N; const savedN=N; const countAdd = newN - m; const startIdx = m; const endIdx = newN; const sp = (CFG.spawn||'random').toLowerCase(); const cx=innerWidth*0.5, cy=innerHeight*0.5; const R=Math.min(innerWidth, innerHeight)*0.38; const gridN=Math.ceil(Math.sqrt(newN));
+        for (let i=startIdx;i<endIdx;i++){
+          let px,py;
+          switch (sp){
+            case 'ring': { const a=(i/newN)*Math.PI*2; px=cx+Math.cos(a)*R; py=cy+Math.sin(a)*R; break; }
+            case 'center': { const a=rand(0,Math.PI*2); const r=R*0.2*rand(0,1); px=cx+Math.cos(a)*r; py=cy+Math.sin(a)*r; break; }
+            case 'edge': { const p=rand(0,1); if(p<0.25){px=rand(0,innerWidth);py=0}else if(p<0.5){px=innerWidth;py=rand(0,innerHeight)}else if(p<0.75){px=rand(0,innerWidth);py=innerHeight}else{px=0;py=rand(0,innerHeight)} break; }
+            case 'grid': { const gx=i % gridN, gy=Math.floor(i / gridN); px=(gx+0.5)*(innerWidth/gridN); py=(gy+0.5)*(innerHeight/gridN); break; }
+            default: { px=rand(0,innerWidth); py=rand(0,innerHeight); }
+          }
+          x[i]=px; y[i]=py; const a=rand(0,Math.PI*2); const s=rand(CFG.minSpeed, CFG.maxSpeed); vx[i]=Math.cos(a)*s; vy[i]=Math.sin(a)*s; sz[i]=0.7+rand(0,1.6);
+        }
+      }
+      // rebuild indices
+      indices = Array.from({length:N}, (_,i)=>i);
+    }
 
     // Interaction
     let mouseX = innerWidth*0.5, mouseY = innerHeight*0.5; let mouseDown = false;
     const shocks = [];
     addEventListener('pointermove', (e)=>{ mouseX=e.clientX; mouseY=e.clientY; });
-    addEventListener('pointerdown', ()=>{ mouseDown=true; shocks.push({x:mouseX,y:mouseY,t:0}); });
+    addEventListener('pointerdown', ()=>{ mouseDown=true; shocks.push({x:mouseX,y:mouseY,t:0,mode:String(CFG.clickMode||'shockwave')}); });
     addEventListener('pointerup', ()=>{ mouseDown=false; });
 
     const TAU = Math.PI*2;
@@ -286,16 +312,25 @@
         // Flow field
         if (CFG.flow){ const v=flowVec(x[i], y[i], 1); vx[i]+=v[0]; vy[i]+=v[1]; }
         
-        // Mouse attract/repel
+        // Mouse drag effects
         if (mouseDown){
-          const dx=mouseX-x[i], dy=mouseY-y[i]; const d=Math.hypot(dx,dy)+1e-3;
-          const f = Math.min(0.6, 120/(d+40));
-          vx[i]+=dx/d*f; vy[i]+=dy/d*f;
+          const dx=mouseX-x[i], dy=mouseY-y[i]; const d=Math.hypot(dx,dy)+1e-3; const ux=dx/d, uy=dy/d;
+          const mode = String(CFG.dragMode||'pull');
+          if (mode==='push') { const f=Math.min(0.6, 120/(d+40)); vx[i]-=ux*f; vy[i]-=uy*f; }
+          else if (mode==='spin') { const f=Math.min(0.8, 160/(d+60)); vx[i]+= -uy*f; vy[i]+= ux*f; }
+          else if (mode==='flow') { const v=flowVec(x[i], y[i], 1); vx[i]+=v[0]*0.8; vy[i]+=v[1]*0.8; }
+          else { const f=Math.min(0.6, 120/(d+40)); vx[i]+=ux*f; vy[i]+=uy*f; }
         }
         // Shockwaves
         for (let s=0;s<shocks.length;s++){
           const sh = shocks[s]; const dx=x[i]-sh.x, dy=y[i]-sh.y; const d=Math.hypot(dx,dy)+1e-3; const R = 220+sh.t*420; const w = Math.max(0, 1 - Math.abs(d-R)/60);
-          if (w>0){ const str = 0.8*w; vx[i]+=dx/d*str; vy[i]+=dy/d*str; }
+          if (w>0){
+            const mode = sh.mode||'shockwave';
+            if (mode==='gravity') { const str=0.8*w; vx[i]-=dx/d*str; vy[i]-=dy/d*str; }
+            else if (mode==='spin') { const str=0.9*w; vx[i]+= - (dy/d)*str; vy[i]+= (dx/d)*str; }
+            else if (mode==='scatter') { const str=1.2*w; vx[i]+=dx/d*str; vy[i]+=dy/d*str; }
+            else { const str=0.8*w; vx[i]+=dx/d*str; vy[i]+=dy/d*str; }
+          }
         }
 
         limitVec(i);
@@ -331,13 +366,14 @@
       // Switch to draw mode (e.g., additive trails for boids)
       ctx.globalCompositeOperation=CFG.blend || 'lighter';
       ctx.lineWidth = CFG.lineWidth;
-      // Draw overlays (quadtree, flow) in normal composition to avoid additive brightening
-      if (CFG.qt || CFG.flowViz){
+      // Draw overlays (quadtree, flow, vision) in normal composition to avoid additive brightening
+      if (CFG.qt || CFG.flowViz || (String(CFG.visionViz||'off')!=='off')){
         // Draw overlays in normal composition to avoid additive brightening
         const saved = ctx.globalCompositeOperation;
         ctx.globalCompositeOperation='source-over';
         if (CFG.qt) drawQT();
         if (CFG.flowViz) drawFlowViz();
+        if (String(CFG.visionViz||'off')!=='off') drawVision();
         ctx.globalCompositeOperation=saved;
       }
       for (let i=0;i<N;i++){
@@ -355,6 +391,17 @@
           }
         }
         const mode = (CFG.shape||'trail').toLowerCase();
+        let savedShadow=ctx.shadowBlur, savedShadowColor=ctx.shadowColor;
+        if (CFG.flowGlow){
+          // approximate nearest arrow color by sampling the grid center
+          const s = Math.max(8, (CFG.flowVizStep|0)||56);
+          const gx = Math.round(x[i]/s)*s, gy=Math.round(y[i]/s)*s;
+          const v2 = flowVec(gx, gy, 1);
+          const ang2 = Math.atan2(v2[1], v2[0]);
+          const hue2 = (BASE_HUE + (ang2/Math.PI)*90 + 360) % 360;
+          ctx.shadowBlur = 10;
+          ctx.shadowColor = `hsl(${hue2} 90% 60% / 0.8)`;
+        }
         switch (mode){
           case 'triangle': {
             const ang = Math.atan2(vy[i], vx[i]);
@@ -399,9 +446,16 @@
             ctx.stroke();
           }
         }
+        if (CFG.flowGlow){ ctx.shadowBlur = savedShadow; ctx.shadowColor = savedShadowColor; }
       }
-      // Age shockwaves
-      for (let s=shocks.length-1; s>=0; s--) { shocks[s].t += dt; if (shocks[s].t > 2.5) shocks.splice(s,1); }
+      // Age shockwaves (and draw ring animation)
+      for (let s=shocks.length-1; s>=0; s--) {
+        shocks[s].t += dt; if (shocks[s].t > 2.5) shocks.splice(s,1);
+      }
+      // Draw shock visuals
+      if (shocks.length){ const saved = ctx.globalCompositeOperation; ctx.globalCompositeOperation='source-over'; ctx.save();
+        for (const sh of shocks){ const R = 220+sh.t*420; const a = Math.max(0, 1 - sh.t/2.5); ctx.strokeStyle = `hsl(${(BASE_HUE+60)%360} 70% 60% / ${a*0.4})`; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(sh.x, sh.y, R, 0, TAU); ctx.stroke(); }
+        ctx.restore(); ctx.globalCompositeOperation=saved; }
       requestAnimationFrame(render);
     }
 
@@ -409,8 +463,8 @@
     (function urlOverride(){
       const intKeys = ['count','vision','sep','qtCap','bgHueShift1','bgHueShift2','bgHueShift3','flowOctaves'];
       const numKeys = ['maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','glowBase','glowMax','glowScale','cometSize','flowAmp','flowScale','flowSpeed','flowVizStep','flowAmpVar','flowAniso','flowHueScale'];
-      const boolKeys = ['wrap','bgGradient','qt','flow','flowViz','showHud','showHeader','showSubheader','flowColor'];
-      const strKeys = ['shape','blend','spawn','flowMode','flowColorMode'];
+      const boolKeys = ['wrap','bgGradient','qt','flow','flowViz','showHud','showHeader','showSubheader','flowColor','flowGlow'];
+      const strKeys = ['shape','blend','spawn','flowMode','flowColorMode','clickMode','dragMode','visionViz'];
       for (const k of intKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Math.max(-99999, Math.min(99999, parseInt(v))); }
       for (const k of numKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Number(v); }
       for (const k of boolKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = (String(v).toLowerCase()==='true' || String(v)==='1'); }
@@ -427,8 +481,8 @@
         'count','vision','sep','maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','wrap',
         'bgGradient','bgHueShift1','bgHueShift2','bgHueShift3',
         'qt','qtCap',
-        'flow','flowAmp','flowScale','flowSpeed','flowViz','flowVizStep','flowAmpVar','flowAniso','flowOctaves','flowMode','flowColor','flowHueScale','flowColorMode',
-        'shape','blend','spawn','showHud','showHeader','showSubheader'
+        'flow','flowAmp','flowScale','flowSpeed','flowViz','flowVizStep','flowAmpVar','flowAniso','flowOctaves','flowMode','flowColor','flowHueScale','flowColorMode','flowGlow',
+        'shape','blend','spawn','showHud','showHeader','showSubheader','clickMode','dragMode','visionViz'
       ];
       for (const k of keys) { if (CFG[k] !== undefined) url.searchParams.set(k, String(CFG[k])); }
       for (const [k,v] of Object.entries(extra)) url.searchParams.set(k, v);
@@ -468,7 +522,7 @@
         const get = ()=> CFG[key];
         const set = (v)=>{ CFG[key] = isInt ? Math.round(v) : Number(v); };
         input.value = String(get()); val.textContent = String(get());
-        input.addEventListener('input', ()=>{ set(input.value); val.textContent = String(get()); updateUrlFromCfg(); });
+        input.addEventListener('input', ()=>{ set(input.value); val.textContent = String(get()); if (key==='count') setBoidCount(get()); updateUrlFromCfg(); });
         wrap.appendChild(l); wrap.appendChild(val);
         row.appendChild(wrap); row.appendChild(input); root.appendChild(row);
       };
@@ -522,6 +576,11 @@
       addRange('Flow octaves', 'flowOctaves', 1, 6, 1, true);
       addCheck('Flow color', 'flowColor');
       addRange('Flow hue influence', 'flowHueScale', 0, 180, 5);
+      addSelect('Flow color mode', 'flowColorMode', ['angle','strength']);
+      addCheck('Flow glow', 'flowGlow');
+      addSelect('Click mode', 'clickMode', ['shockwave','gravity','spin','scatter']);
+      addSelect('Drag mode', 'dragMode', ['pull','push','spin','flow']);
+      addSelect('Vision viz', 'visionViz', ['off','one','all']);
 
       addSelect('Blend', 'blend', ['lighter','plus-lighter','screen','source-over']);
       addSelect('Shape', 'shape', ['trail','triangle','dot','comet','ring']);
@@ -537,7 +596,7 @@
     }
 
     // Simple quadtree implementation for neighbor queries and visualization
-    const indices = Array.from({length:N}, (_,i)=>i);
+    let indices = Array.from({length:N}, (_,i)=>i);
     let qtree=null;
     function QTNode(x,y,w,h,depth){ this.x=x; this.y=y; this.w=w; this.h=h; this.d=depth; this.p=[]; this.c=null; }
     function subdiv(n){
@@ -559,6 +618,20 @@
       return qtree;
     }
     function drawQT(){ if (!qtree) return; ctx.save(); ctx.strokeStyle='#1f2937'; drawNode(qtree); ctx.restore(); }
+    // Perception visualization
+    function drawVision(){
+      const mode = String(CFG.visionViz||'off'); if (mode==='off') return;
+      const V = CFG.vision;
+      ctx.save(); ctx.strokeStyle = 'rgba(148,163,184,0.35)';
+      if (mode==='all'){
+        for (let i=0;i<N;i++){ ctx.beginPath(); ctx.arc(x[i], y[i], V, 0, TAU); ctx.stroke(); }
+      } else {
+        // draw for nearest boid to mouse
+        let bi=0, bd=1e9; for (let i=0;i<N;i++){ const dx=x[i]-mouseX, dy=y[i]-mouseY; const d=dx*dx+dy*dy; if (d<bd){ bd=d; bi=i; } }
+        ctx.beginPath(); ctx.arc(x[bi], y[bi], V, 0, TAU); ctx.stroke();
+      }
+      ctx.restore();
+    }
     function drawNode(n){ if (!n) return; ctx.strokeRect(n.x, n.y, n.w, n.h); if (n.c){ for (const c of n.c) drawNode(c); } }
     function queryNeighbors(root, px, py, rad, selfIdx){ if (!root) return indices; const out=[]; queryNode(root, px, py, rad, out); return out; }
     function queryNode(n, px, py, r, out){ if (!n || !intersects(n, px, py, r)) return; if (n.c){ for (const c of n.c) queryNode(c, px, py, r, out); } else { for (const i of n.p) out.push(i); } }

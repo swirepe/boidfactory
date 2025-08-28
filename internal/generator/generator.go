@@ -48,10 +48,16 @@ type Config struct {
     FlowColor     bool
     FlowHueScale  float64 // 0..180 degrees of influence
     FlowColorMode string  // angle | strength
+    FlowGlow      bool    // glow using nearest flow arrow hue
     // Overlay visibility
     ShowHeader     bool
     ShowSubheader  bool
     ShowHud     bool
+    // Interaction variety
+    ClickMode   string // shockwave | gravity | spin | scatter
+    DragMode    string // pull | push | spin | flow
+    // Vision visualization
+    VisionViz   string // off | one | all
     Shape       string
     Blend       string
     Spawn       string
@@ -62,6 +68,7 @@ func defaultConfig(r *rand.Rand) Config {
     shapes := []string{"trail","triangle","dot","comet","ring"}
     blends := []string{"lighter","plus-lighter","screen","source-over"}
     spawns := []string{"random","ring","center","edge","grid"}
+    flow := r.IntN(100) < 50
     return Config{
         Count:       220 + r.IntN(120),
         Vision:      65 + r.Float64()*45,
@@ -79,13 +86,13 @@ func defaultConfig(r *rand.Rand) Config {
         BgHueShift1: r.IntN(45),
         BgHueShift2: 30 + r.IntN(150),
         BgHueShift3: 60 + r.IntN(220),
-        Qt:          r.IntN(100) < 70,
+        Qt:          true,
         QtCap:       10 + r.IntN(20),
-        Flow:        r.IntN(100) < 50,
+        Flow:        flow,
         FlowAmp:     0.15 + r.Float64()*0.5,
         FlowScale:   0.001 + r.Float64()*0.006,
         FlowSpeed:   0.4 + r.Float64()*1.0,
-        FlowViz:     false,
+        FlowViz:     flow, // show viz if flow is on
         FlowVizStep: 56 + r.IntN(40),
         FlowMode:    []string{"angle","curl","turbulence"}[r.IntN(3)],
         FlowAmpVar:  r.Float64()*0.5,
@@ -94,9 +101,13 @@ func defaultConfig(r *rand.Rand) Config {
         FlowColor:   true,
         FlowHueScale: 40 + r.Float64()*80, // 40..120 deg
         FlowColorMode: []string{"angle","strength"}[r.IntN(2)],
+        FlowGlow:    flow, // default glow when viz likely on
         ShowHeader:  true,
         ShowSubheader: true,
         ShowHud:     true,
+        ClickMode:   []string{"shockwave","gravity","spin","scatter"}[r.IntN(4)],
+        DragMode:    []string{"pull","push","spin","flow"}[r.IntN(4)],
+        VisionViz:   []string{"off","one","all"}[r.IntN(3)],
         Shape:       shapes[r.IntN(len(shapes))],
         Blend:       blends[r.IntN(len(blends))],
         Spawn:       spawns[r.IntN(len(spawns))],
@@ -157,9 +168,13 @@ func Generate(seedStr, header, subheader string) (string, error) {
         "CfgFlowColor":  cfg.FlowColor,
         "CfgFlowHueScale": cfg.FlowHueScale,
         "CfgFlowColorMode": cfg.FlowColorMode,
+        "CfgFlowGlow":   cfg.FlowGlow,
         "CfgShowHeader":  cfg.ShowHeader,
         "CfgShowSubheader": cfg.ShowSubheader,
         "CfgShowHud":   cfg.ShowHud,
+        "CfgClickMode": cfg.ClickMode,
+        "CfgDragMode":  cfg.DragMode,
+        "CfgVisionViz": cfg.VisionViz,
         "CfgShape":     cfg.Shape,
         "CfgBlend":     cfg.Blend,
         "CfgSpawn":     cfg.Spawn,
@@ -222,6 +237,9 @@ func executeTemplate(tpl string, data map[string]any) (string, error) {
     repl("CfgFlowOctaves", fmt.Sprint(data["CfgFlowOctaves"]))
     repl("CfgFlowHueScale", fmt.Sprint(data["CfgFlowHueScale"]))
     repl("CfgFlowColorMode", fmt.Sprint(data["CfgFlowColorMode"]))
+    repl("CfgClickMode", fmt.Sprint(data["CfgClickMode"]))
+    repl("CfgDragMode", fmt.Sprint(data["CfgDragMode"]))
+    repl("CfgVisionViz", fmt.Sprint(data["CfgVisionViz"]))
     repl("CfgShape", fmt.Sprint(data["CfgShape"]))
     repl("CfgBlend", fmt.Sprint(data["CfgBlend"]))
     repl("CfgSpawn", fmt.Sprint(data["CfgSpawn"]))
@@ -232,6 +250,7 @@ func executeTemplate(tpl string, data map[string]any) (string, error) {
     if data["CfgFlow"].(bool) { repl("CfgFlow", "true") } else { repl("CfgFlow", "false") }
     if data["CfgFlowViz"].(bool) { repl("CfgFlowViz", "true") } else { repl("CfgFlowViz", "false") }
     if data["CfgFlowColor"].(bool) { repl("CfgFlowColor", "true") } else { repl("CfgFlowColor", "false") }
+    if data["CfgFlowGlow"].(bool) { repl("CfgFlowGlow", "true") } else { repl("CfgFlowGlow", "false") }
     if data["CfgShowHeader"].(bool) { repl("CfgShowHeader", "true") } else { repl("CfgShowHeader", "false") }
     if data["CfgShowSubheader"].(bool) { repl("CfgShowSubheader", "true") } else { repl("CfgShowSubheader", "false") }
     if data["CfgShowHud"].(bool) { repl("CfgShowHud", "true") } else { repl("CfgShowHud", "false") }
