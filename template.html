@@ -79,9 +79,12 @@
 
   /* Viewer */
   main{min-width:0; display:flex; flex-direction:column}
-  header.page{padding:10px; border-bottom:1px solid var(--border); background:#0c1117;}
+  header.page{padding:10px; border-bottom:1px solid var(--border); background:#0c1117; position:relative}
   header.page h2{margin:0; font-size:16px}
   header.page p{margin:2px 0 0 0; color:var(--muted); font-size:12px}
+  /* Auto timer bar shown when Auto is active */
+  .autoTimer{display:none; height:4px; background:#00000055; border-radius:999px; overflow:hidden; margin-top:8px}
+  .autoTimer .bar{height:100%; width:0%; background:var(--accent); box-shadow: 0 0 12px color-mix(in oklab, var(--accent), #000 40%); transition: width .1s linear}
   iframe{flex:1; width:100%; border:none; background:#0a0e13}
   #current-path{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:11px;margin-top:5px}#current-path a{color:var(--muted);text-decoration:none;border-bottom:1px dotted transparent;transition:all .2s ease}#current-path a:hover{color:var(--accent);border-bottom-color:var(--accent)}#current-path code{background:var(--border);padding:2px 5px;border-radius:4px}
   
@@ -155,6 +158,7 @@
       <h2 id="hdr">Links & Viewer</h2>
       <p id="subhdr">Dark theme • URL-parameterized links</p>
       <p id="current-path">Select a file to view its shareable link here</p>
+      <div class="autoTimer" id="autoTimer" aria-hidden="true"><div class="bar" id="autoTimerBar"></div></div>
     </header>
     <iframe name="viewer" src="about:blank" title="Viewer"></iframe>
   </main>
@@ -261,6 +265,8 @@ const displayModeGroup = document.getElementById('displayModeGroup');
 const autoToggle = document.getElementById('autoToggle');
 const autoSecInput = document.getElementById('autoSec');
 const autoStatus = document.getElementById('autoStatus');
+const autoTimerEl = document.getElementById('autoTimer');
+const autoTimerBar = document.getElementById('autoTimerBar');
 const rainbowToggle = document.getElementById('rainbowToggle');
 const rainbowSecInput = document.getElementById('rainbowSec');
 const rainbowStatus = document.getElementById('rainbowStatus');
@@ -278,6 +284,7 @@ autoToggle.checked = !!state.auto;
 autoSecInput.value = state.autoSec;
 autoStatus.textContent = state.auto ? `every ${state.autoSec}s` : 'off';
 let autoTimer = null;
+let autoRAF = null, autoAnimStart = 0;
 function getAnchors(){ return Array.from(document.querySelectorAll('#linkList a:not(.download-btn)')); }
 function getCurrentIndex(){
   const anchors = getAnchors();
@@ -296,9 +303,24 @@ function goTo(index){
 }
 function scheduleAuto(){
   clearInterval(autoTimer);
-  if (!state.auto) return;
+  if (autoRAF) { cancelAnimationFrame(autoRAF); autoRAF = null; }
+  if (!state.auto) { if (autoTimerEl){ autoTimerEl.style.display='none'; if (autoTimerBar) autoTimerBar.style.width='0%'; } return; }
   const step = Math.max(2, state.autoSec) * 1000;
   autoTimer = setInterval(() => { goTo(getCurrentIndex()+1); }, step);
+  // start animated timer bar
+  if (autoTimerEl) {
+    autoTimerEl.style.display='block';
+    autoAnimStart = performance.now();
+    const tick = ()=>{
+      if (!state.auto) { if (autoTimerEl) autoTimerEl.style.display='none'; return; }
+      const now = performance.now();
+      const t = (now - autoAnimStart) % step;
+      const pct = Math.max(0, Math.min(1, t/step));
+      if (autoTimerBar) autoTimerBar.style.width = (pct*100).toFixed(2) + '%';
+      autoRAF = requestAnimationFrame(tick);
+    };
+    autoRAF = requestAnimationFrame(tick);
+  }
 }
 function setAuto(on){
   state.auto = !!on; autoToggle.checked = state.auto; autoStatus.textContent = state.auto ? `every ${state.autoSec}s` : 'off';
@@ -372,7 +394,7 @@ linkList.addEventListener('click', (e) => {
   }
 
   // Reset auto timer on manual navigation
-  if (state.auto) scheduleAuto();
+  if (state.auto) { scheduleAuto(); }
 });
 
 displayModeGroup.addEventListener('change', (event) => {
