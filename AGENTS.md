@@ -47,3 +47,4 @@
 - Codex CLI Agent — signed on 2025-08-28, added `agents/boids-generator.py` and started `agents.log`.
 - Codex CLI Agent — signed on 2025-08-28, fixed `show_help()` in `boidfactory.sh` and logged prompts to `agents.log`.
 - Codex CLI Agent — signed on 2025-08-28, added Go dual‑mode generator/server under `cmd/boids`.
+ - Codex CLI Agent — signed on 2025-08-28, added flow field visualization overlay (Go generator template + config).

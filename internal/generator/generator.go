@@ -36,6 +36,9 @@ type Config struct {
     FlowAmp     float64
     FlowScale   float64
     FlowSpeed   float64
+    // Visualization of the flow field
+    FlowViz     bool
+    FlowVizStep int
     ShowHud     bool
     Shape       string
     Blend       string
@@ -70,6 +73,8 @@ func defaultConfig(r *rand.Rand) Config {
         FlowAmp:     0.15 + r.Float64()*0.5,
         FlowScale:   0.001 + r.Float64()*0.006,
         FlowSpeed:   0.4 + r.Float64()*1.0,
+        FlowViz:     false,
+        FlowVizStep: 56 + r.IntN(40),
         ShowHud:     true,
         Shape:       shapes[r.IntN(len(shapes))],
         Blend:       blends[r.IntN(len(blends))],
@@ -122,6 +127,8 @@ func Generate(seedStr, header, subheader string) (string, error) {
         "CfgFlowAmp":   cfg.FlowAmp,
         "CfgFlowScale": cfg.FlowScale,
         "CfgFlowSpeed": cfg.FlowSpeed,
+        "CfgFlowViz":   cfg.FlowViz,
+        "CfgFlowVizStep": cfg.FlowVizStep,
         "CfgShowHud":   cfg.ShowHud,
         "CfgShape":     cfg.Shape,
         "CfgBlend":     cfg.Blend,
@@ -178,6 +185,7 @@ func executeTemplate(tpl string, data map[string]any) (string, error) {
     repl("CfgFlowAmp", fmt.Sprint(data["CfgFlowAmp"]))
     repl("CfgFlowScale", fmt.Sprint(data["CfgFlowScale"]))
     repl("CfgFlowSpeed", fmt.Sprint(data["CfgFlowSpeed"]))
+    repl("CfgFlowVizStep", fmt.Sprint(data["CfgFlowVizStep"]))
     repl("CfgShape", fmt.Sprint(data["CfgShape"]))
     repl("CfgBlend", fmt.Sprint(data["CfgBlend"]))
     repl("CfgSpawn", fmt.Sprint(data["CfgSpawn"]))
@@ -186,6 +194,7 @@ func executeTemplate(tpl string, data map[string]any) (string, error) {
     if data["CfgBgGradient"].(bool) { repl("CfgBgGradient", "true") } else { repl("CfgBgGradient", "false") }
     if data["CfgQt"].(bool) { repl("CfgQt", "true") } else { repl("CfgQt", "false") }
     if data["CfgFlow"].(bool) { repl("CfgFlow", "true") } else { repl("CfgFlow", "false") }
+    if data["CfgFlowViz"].(bool) { repl("CfgFlowViz", "true") } else { repl("CfgFlowViz", "false") }
     if data["CfgShowHud"].(bool) { repl("CfgShowHud", "true") } else { repl("CfgShowHud", "false") }
     return out, nil
 }

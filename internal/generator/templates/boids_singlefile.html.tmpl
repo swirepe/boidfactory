@@ -130,6 +130,8 @@
       flowAmp: {{CfgFlowAmp}},
       flowScale: {{CfgFlowScale}},
       flowSpeed: {{CfgFlowSpeed}},
+      flowViz: {{CfgFlowViz}},
+      flowVizStep: {{CfgFlowVizStep}},
       showHud: {{CfgShowHud}},
       shape: '{{CfgShape}}',
       blend: '{{CfgBlend}}',
@@ -315,12 +317,13 @@
       // Switch to draw mode (e.g., additive trails for boids)
       ctx.globalCompositeOperation=CFG.blend || 'lighter';
       ctx.lineWidth = CFG.lineWidth;
-      // Draw quadtree
-      if (CFG.qt){
+      // Draw overlays (quadtree, flow) in normal composition to avoid additive brightening
+      if (CFG.qt || CFG.flowViz){
         // Draw overlays in normal composition to avoid additive brightening
         const saved = ctx.globalCompositeOperation;
         ctx.globalCompositeOperation='source-over';
-        drawQT();
+        if (CFG.qt) drawQT();
+        if (CFG.flowViz) drawFlowViz();
         ctx.globalCompositeOperation=saved;
       }
       for (let i=0;i<N;i++){
@@ -380,8 +383,8 @@
     // URL overrides for config (parity with Python script)
     (function urlOverride(){
       const intKeys = ['count','vision','sep','qtCap','bgHueShift1','bgHueShift2','bgHueShift3'];
-      const numKeys = ['maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','glowBase','glowMax','glowScale','cometSize','flowAmp','flowScale','flowSpeed'];
-      const boolKeys = ['wrap','bgGradient','qt','flow','showHud'];
+      const numKeys = ['maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','glowBase','glowMax','glowScale','cometSize','flowAmp','flowScale','flowSpeed','flowVizStep'];
+      const boolKeys = ['wrap','bgGradient','qt','flow','flowViz','showHud'];
       const strKeys = ['shape','blend','spawn'];
       for (const k of intKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Math.max(-99999, Math.min(99999, parseInt(v))); }
       for (const k of numKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Number(v); }
@@ -395,7 +398,13 @@
       url.searchParams.set('hue', String(BASE_HUE));
       url.searchParams.set('header', HEADER);
       if (SUBHEADER !== undefined && SUBHEADER !== null) url.searchParams.set('subheader', SUBHEADER);
-      const keys = ['count','vision','sep','maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','wrap'];
+      const keys = [
+        'count','vision','sep','maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','wrap',
+        'bgGradient','bgHueShift1','bgHueShift2','bgHueShift3',
+        'qt','qtCap',
+        'flow','flowAmp','flowScale','flowSpeed','flowViz','flowVizStep',
+        'shape','blend','spawn','showHud'
+      ];
       for (const k of keys) { if (CFG[k] !== undefined) url.searchParams.set(k, String(CFG[k])); }
       for (const [k,v] of Object.entries(extra)) url.searchParams.set(k, v);
       history.replaceState(null,'',url.toString());
@@ -466,9 +475,11 @@
       addCheck('Quadtree (viz)', 'qt');
       addRange('Quadtree cap', 'qtCap', 4, 64, 1, true);
       addCheck('Flow field', 'flow');
+      addCheck('Flow viz (overlay)', 'flowViz');
       addRange('Flow amplitude', 'flowAmp', 0, 2, 0.05);
       addRange('Flow scale', 'flowScale', 0.0005, 0.02, 0.0005);
       addRange('Flow speed', 'flowSpeed', 0, 3, 0.05);
+      addRange('Flow grid size', 'flowVizStep', 12, 200, 4, true);
 
       const addSelect = (label, key, options)=>{
         const row = document.createElement('div'); row.className='row';
@@ -520,6 +531,37 @@
     function queryNeighbors(root, px, py, rad, selfIdx){ if (!root) return indices; const out=[]; queryNode(root, px, py, rad, out); return out; }
     function queryNode(n, px, py, r, out){ if (!n || !intersects(n, px, py, r)) return; if (n.c){ for (const c of n.c) queryNode(c, px, py, r, out); } else { for (const i of n.p) out.push(i); } }
     function intersects(n, px, py, r){ const nx=Math.max(n.x, Math.min(px, n.x+n.w)); const ny=Math.max(n.y, Math.min(py, n.y+n.h)); const dx=px-nx, dy=py-ny; return dx*dx+dy*dy <= r*r; }
+
+    // Flow field visualization overlay
+    function drawFlowViz(){
+      const s = Math.max(8, (CFG.flowVizStep|0) || 56);
+      ctx.save();
+      ctx.lineWidth = 1;
+      for (let yy=0; yy<=innerHeight; yy+=s){
+        for (let xx=0; xx<=innerWidth; xx+=s){
+          const v = perlinVec(xx*0.01+flowT, yy*0.01-flowT, CFG.flowScale, 1);
+          const l = Math.hypot(v[0], v[1]) || 1;
+          const dx = v[0]/l, dy = v[1]/l;
+          const L = Math.max(6, s*0.35);
+          const x1 = xx - dx*L*0.5, y1 = yy - dy*L*0.5;
+          const x2 = xx + dx*L*0.5, y2 = yy + dy*L*0.5;
+          const ang = Math.atan2(dy, dx);
+          const hue = (BASE_HUE + (ang/Math.PI)*90 + 360) % 360;
+          ctx.strokeStyle = `hsl(${hue} 70% 65% / 0.6)`;
+          ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+          // arrow head
+          const ah = Math.max(4, L*0.18);
+          const a1 = ang + 2.6, a2 = ang - 2.6;
+          ctx.beginPath();
+          ctx.moveTo(x2,y2);
+          ctx.lineTo(x2 + Math.cos(a1)*ah*0.6, y2 + Math.sin(a1)*ah*0.6);
+          ctx.moveTo(x2,y2);
+          ctx.lineTo(x2 + Math.cos(a2)*ah*0.6, y2 + Math.sin(a2)*ah*0.6);
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    }
 
     // Simple 2D noise-based flow
     let noiseSeed = (DEFAULT_HUE * 1664525 + 1013904223) >>> 0;
