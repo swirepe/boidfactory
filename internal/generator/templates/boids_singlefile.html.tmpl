@@ -275,7 +275,15 @@
     function limitVec(ix){
       const sp = Math.hypot(vx[ix], vy[ix]);
       const ms = CFG.maxSpeed;
-      if (sp > ms){ const s = ms/sp; vx[ix]*=s; vy[ix]*=s; }
+      if (sp > ms){ const s = ms/sp; vx[ix]*=s; vy[ix]*=s; return; }
+      const mn = Math.max(0, Number(CFG.minSpeed)||0);
+      if (sp < mn){
+        if (sp < 1e-6){ // nudge in random direction
+          const a = rand(0, TAU); vx[ix] = Math.cos(a)*mn; vy[ix] = Math.sin(a)*mn;
+        } else {
+          const s = mn/(sp||1); vx[ix]*=s; vy[ix]*=s;
+        }
+      }
     }
 
     function step(){
@@ -309,8 +317,28 @@
           // add forces, clamp
           vx[i]+=clamp(sx+cx+ax, -MF, MF); vy[i]+=clamp(sy+cy+ay, -MF, MF);
         }
-        // Flow field
-        if (CFG.flow){ const v=flowVec(x[i], y[i], 1); vx[i]+=v[0]; vy[i]+=v[1]; }
+        // Flow field with boundary attenuation
+        if (CFG.flow){
+          const xi2 = x[i], yi2 = y[i];
+          let att = 1;
+          if (!CFG.wrap){
+            const M = 56; // fade flow near edges to avoid pushing out
+            const bx = Math.min(xi2, innerWidth - xi2);
+            const by = Math.min(yi2, innerHeight - yi2);
+            att = Math.max(0, Math.min(1, Math.min(bx, by) / M));
+          }
+          const v = flowVec(xi2, yi2, att);
+          vx[i]+=v[0]; vy[i]+=v[1];
+        }
+        // Soft wall repel to keep inside when wrap is off
+        if (!CFG.wrap){
+          const m = 38; let fx=0, fy=0;
+          if (x[i] < m) fx += (m - x[i]) / m;
+          else if (innerWidth - x[i] < m) fx -= (m - (innerWidth - x[i])) / m;
+          if (y[i] < m) fy += (m - y[i]) / m;
+          else if (innerHeight - y[i] < m) fy -= (m - (innerHeight - y[i])) / m;
+          if (fx!==0 || fy!==0){ const f=0.8; vx[i]+=fx*f; vy[i]+=fy*f; }
+        }
         
         // Mouse drag effects
         if (mouseDown){

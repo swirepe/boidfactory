@@ -49,3 +49,9 @@ Let's add a way to toggle showing the header and subheader. When I click on an i
 ==== 2025-08-28T06:21:16Z Prompt Start ====
 Make count slider change boid count live; add perception radius visualization (one/all); per-simulation variety in spawn and click/drag effects; enable flow viz when flow is on; add flow-glow based on nearest arrow; enable quadtree viz by default.
 ==== Prompt End ====
+==== 2025-08-28T06:25:47Z Prompt Start ====
+Ensure flow fields don't push boids out of bounds or get them stuck; enforce min speed; add boundary attenuation and soft wall repulsion when wrap is off.
+==== Prompt End ====
+==== 2025-08-28T06:31:52Z Prompt Start ====
+Update the AGENTS.md, add a README.md please
+==== Prompt End ====

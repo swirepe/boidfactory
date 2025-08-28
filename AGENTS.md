@@ -12,6 +12,8 @@
 - `aider/`: Reference/example HTML outputs.
 - `runs/`: Generated artifacts (timestamped folders with `*-impl.html` and logs).
 - `eslint.config.js`, `template.html`: Lint config and HTML template for the viewer.
+ - `cmd/boids`: Go dual‑mode generator/server. CLI produces single‑file HTML; server serves `/seed` pages.
+ - `internal/generator`: Go template + generator for the single‑file HTML (embedded template, config wiring).
 
 ## Build, Test, and Dev Commands
 - Generate an HTML simulation (single run): `./boidfactory.sh --model qwen3-coder:latest`
@@ -48,4 +50,5 @@
 - Codex CLI Agent — signed on 2025-08-28, fixed `show_help()` in `boidfactory.sh` and logged prompts to `agents.log`.
 - Codex CLI Agent — signed on 2025-08-28, added Go dual‑mode generator/server under `cmd/boids`.
 - Codex CLI Agent — signed on 2025-08-28, added flow field visualization overlay (Go generator template + config).
- - Codex CLI Agent — signed on 2025-08-28, added header/subheader visibility toggles, overlay toggle behavior, and advanced flow field configuration (modes, variation, anisotropy, octaves).
+- Codex CLI Agent — signed on 2025-08-28, added header/subheader visibility toggles, overlay toggle behavior, and advanced flow field configuration (modes, variation, anisotropy, octaves).
+ - Codex CLI Agent — signed on 2025-08-28, added live count resizing, vision radius viz (one/all), click/drag behavior variety, flow-driven color + glow, default quadtree/flow viz, and edge safety for non-wrap.
