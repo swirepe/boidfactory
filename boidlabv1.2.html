@@ -1,4 +1,22 @@
 <!DOCTYPE html>
+<!--
+  Boids Simulation – Single-file Lab (v1.2)
+  
+  Goals
+  - Clean, readable structure with sectioned comments
+  - Smartly documented example rules (cohesion/separation/alignment/novel)
+  - Minimal external dependencies (CDN for editors/charts only)
+
+  Structure
+  - CSS: variables, layout, overlays, code pane, charts
+  - HTML: full-screen canvas, overlays (config/stats/help), code pane tabs
+  - JS: utilities → simulation core → UI → main loop → charts → helpers
+
+  Notes
+  - Example rule code is editable live; each rule must return a Vector.
+  - The dynamic function scope provides: boid, gameState, neighbors, config, mouse, Vector.
+  - Keep rule code side-effect free (only return a force vector) for clarity.
+-->
 <html lang="en">
 <head>
     <meta charset="UTF-8">
@@ -513,56 +531,90 @@
         // --- DEFAULT USER FUNCTIONS ---
         
         const defaultFunctionsCode = {
-            cohesion: `const perceptionRadius = config.perceptionRadius;
-const steering = new Vector();
+          cohesion: `/*
+  Cohesion: Steer toward the average position of nearby boids.
+  Inputs: boid, neighbors, config, Vector
+  Returns: Vector steering force (must be a Vector)
+  Steps:
+    1) Average neighbor positions within perception radius
+    2) Desired velocity toward that center, at maxSpeed
+    3) Steering = desired - current velocity, limited to maxForce
+*/
+const radius = config.perceptionRadius;
+let center = new Vector(0, 0);
 let total = 0;
 for (const other of neighbors) {
-    if (Vector.dist(boid.pos, other.pos) < perceptionRadius) {
-        steering.add(other.pos);
-        total++;
-    }
-}
-if (total > 0) {
-    steering.div(total).sub(boid.pos).normalize().mult(boid.maxSpeed).sub(boid.vel).limit(boid.maxForce);
-}
-return steering;`,
-            separation: `const desiredSeparation = config.boidSize * 2.5; // Scale with boid size
-const steering = new Vector();
-let count = 0;
-for (const other of neighbors) {
+  if (other !== boid) {
     const d = Vector.dist(boid.pos, other.pos);
-    if (d > 0 && d < desiredSeparation) {
-        let diff = Vector.sub(boid.pos, other.pos).normalize().div(d);
-        steering.add(diff);
-        count++;
+    if (d > 0 && d < radius) {
+      center.add(other.pos);
+      total++;
     }
+  }
 }
-if (count > 0) {
-    steering.div(count).normalize().mult(boid.maxSpeed).sub(boid.vel).limit(boid.maxForce * 1.5);
-}
-return steering;`,
-            alignment: `const perceptionRadius = config.perceptionRadius;
-const steering = new Vector();
+if (total === 0) return new Vector(0, 0);
+center.div(total);
+const desired = Vector.sub(center, boid.pos).normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);`,
+
+          separation: `/*
+  Separation: Steer away from nearby boids to avoid crowding.
+  Strategy: Inverse-square falloff (1/d^2) gives strong close-range repulsion.
+  Tip: Slightly higher force multiplier helps quick response.
+*/
+const desiredSeparation = Math.max(8, config.boidSize * 2.5);
+let steer = new Vector(0, 0);
 let total = 0;
 for (const other of neighbors) {
-    if (Vector.dist(boid.pos, other.pos) < perceptionRadius) {
-        steering.add(other.vel);
-        total++;
+  if (other !== boid) {
+    const offset = Vector.sub(boid.pos, other.pos);
+    const d = offset.mag();
+    if (d > 0 && d < desiredSeparation) {
+      // Inverse-square falloff: closer ⇒ stronger
+      offset.normalize().div(d * d);
+      steer.add(offset);
+      total++;
     }
+  }
 }
-if (total > 0) {
-    steering.div(total).normalize().mult(boid.maxSpeed).sub(boid.vel).limit(boid.maxForce);
+if (total === 0) return new Vector(0, 0);
+steer.div(total).normalize().mult(boid.maxSpeed);
+return Vector.sub(steer, boid.vel).limit(boid.maxForce * 1.5);`,
+
+          alignment: `/*
+  Alignment: Match the average heading (velocity) of neighbors.
+*/
+const radius = config.perceptionRadius;
+let avgVel = new Vector(0, 0);
+let total = 0;
+for (const other of neighbors) {
+  if (other !== boid) {
+    const d = Vector.dist(boid.pos, other.pos);
+    if (d > 0 && d < radius) {
+      avgVel.add(other.vel);
+      total++;
+    }
+  }
 }
-return steering;`,
-            novel: `const mouseForce = new Vector();
+if (total === 0) return new Vector(0, 0);
+avgVel.div(total).normalize().mult(boid.maxSpeed);
+return Vector.sub(avgVel, boid.vel).limit(boid.maxForce);`,
+
+          novel: `/*
+  Novel: Mouse-driven flee force when mouse is down.
+  Behavior: If within fleeRadius of the cursor, push away proportionally.
+*/
+const mouseForce = new Vector(0, 0);
 const mousePos = new Vector(mouse.pos.x, mouse.pos.y);
 const fleeRadius = 150;
-const distToMouse = Vector.dist(boid.pos, mousePos);
-if (mouse.down && distToMouse < fleeRadius) {
-    let flee = Vector.sub(boid.pos, mousePos);
-    const fleeMagnitude = (fleeRadius - distToMouse) / fleeRadius;
-    flee.normalize().mult(fleeMagnitude * boid.maxSpeed * 2.0).sub(boid.vel).limit(boid.maxForce * 2.0);
-    mouseForce.add(flee);
+const d = Vector.dist(boid.pos, mousePos);
+if (mouse.down && d < fleeRadius) {
+  const strength = (fleeRadius - d) / fleeRadius; // 0..1
+  const desired = Vector.sub(boid.pos, mousePos) // away from mouse
+    .normalize()
+    .mult(boid.maxSpeed * 2.0 * strength);
+  const steer = Vector.sub(desired, boid.vel).limit(boid.maxForce * 2.0);
+  mouseForce.add(steer);
 }
 return mouseForce;`
         };
@@ -803,6 +855,10 @@ return mouseForce;`
                     lint: true, gutters: ["CodeMirror-lint-markers"],
                 });
 
+                // Live-compile user rule code into a function with a narrow, explicit scope.
+                // Scope parameters available inside the editor code:
+                //   boid (Boid), gameState ({boids, quadtree, width, height}), neighbors (Boid[]),
+                //   config (object), mouse ({pos, down}), Vector (math helper)
                 const updateFunction = debounce((editor) => {
                     const tabButton = document.querySelector(`.tab-button[data-tab="${fn.name}"]`);
                     try {
