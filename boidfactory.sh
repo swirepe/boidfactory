@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Derive a stable script name for help output even when invoked via `bash script.sh`
+SCRIPT_NAME="$(basename "${BASH_SOURCE[0]:-$0}")"
+
 PARALLEL_JOBS=4
 TIMES=1
 
@@ -23,7 +26,7 @@ LOCKFILE="/tmp/ollama-tee-$UUID.lock"
 trap '{ rm -f -- "$LOCKFILE"; }' EXIT
 
 PROMPT="Write an interactive boids simulation as a single file in html, css, and javascript."
-PROMPT_DARK_THEME=$(cat << EndOfMessage
+read -r -d '' PROMPT_DARK_THEME <<'EndOfMessage' || true
 Let's write an beautiful, interactive, highly-configurable and informative boids simulation.
 
 Let's write this as a single page in html, css, and javascript. Let's not use any external libraries.
@@ -37,9 +40,8 @@ I want all overlays to start hidden.
 I want a help overlay that includes (but is not limited to) a description of this project, documentation for all configuration, specs, a detailed change log, and a comprehensive prompt log that includes this entire prompt.
 
 EndOfMessage
-)
 
-PROMPT_WITH_TWIST=$(cat<<- EndOfMessage
+read -r -d '' PROMPT_WITH_TWIST <<'EndOfMessage' || true
 Let's write an interactive, informative, and beautiful boids simulation.
 
 Invent ONE entirely new, creative rule that changes the boids' behavior in a surprising and interesting way.
@@ -62,12 +64,11 @@ I want all overlays to start hidden.
 I want a help overlay that includes (but is not limited to) a description of this project, documentation for all configuration, specs, a detailed change log, and a comprehensive prompt log that includes this entire prompt.
 
 EndOfMessage
-)
 
 
 show_help() {
 cat << EOF
-Usage: $0 [OPTIONS]
+Usage: ${SCRIPT_NAME} [OPTIONS]
 
 Generates a single-file Boids simulation by first creating a spec, then an implementation via Ollama.
 
@@ -123,7 +124,7 @@ while [[ $# -gt 0 ]]; do
             PROMPT="$PROMPT_DARK_THEME"; shift 1;;
         --twist)
             PROMPT="$PROMPT_WITH_TWIST"; shift 1;;
-        -code-model)
+        --code-model)
             CODE_MODEL="$2"
             shift 2
             ;;
@@ -137,7 +138,7 @@ while [[ $# -gt 0 ]]; do
             ;;
         --spec-model)
             SPEC_MODEL="$2"
-            shift
+            shift 2
             ;;
         --spec-model-select)
             SPEC_MODEL=$(ollama list | tail -n +2 | sort -k2 -h -r | column -t | \

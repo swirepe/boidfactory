@@ -114,7 +114,9 @@ DOC = r"""<!doctype html>
         'shock','vortex','implosion','spray','stun','fear','attract','orbitCW','orbitCCW',
         'spiralOut','spiralIn','freeze','scramble','scatter','magnet','pulse',
         'warp','grow','tunnel','ripple','jitterburst','chromaburst','slowdown','speedup',
-        'perlinDrag','lissaPulse','meteor'
+        'perlinDrag','lissaPulse','meteor',
+        // steering-weight effects
+        'align','dealign','cohere','loosen','separate','disperse'
       ];
 
       function parseBool(v, d) {
@@ -222,6 +224,8 @@ DOC = r"""<!doctype html>
       let px, py, vx, vy, ax, ay, hue, spd, prevx, prevy;
       // transient per-boid modifiers (decay each frame)
       let sizeMul, vBoost, hueOff, jitAmp;
+      // transient per-boid steering multipliers (decay each frame)
+      let alignMul, cohesionMul, separationMul;
 
       function alloc(n) {
         px = new Float32Array(n); py = new Float32Array(n);
@@ -230,6 +234,7 @@ DOC = r"""<!doctype html>
         hue = new Float32Array(n); spd = new Float32Array(n);
         prevx = new Float32Array(n); prevy = new Float32Array(n);
         sizeMul = new Float32Array(n); vBoost = new Float32Array(n); hueOff = new Float32Array(n); jitAmp = new Float32Array(n);
+        alignMul = new Float32Array(n); cohesionMul = new Float32Array(n); separationMul = new Float32Array(n);
       }
 
       function seedBoids() {
@@ -251,6 +256,7 @@ DOC = r"""<!doctype html>
           const m=Math.hypot(vx[i],vy[i])||1; vx[i]*=2.0/m; vy[i]*=2.0/m;
           hue[i] = (paletteHue + rand(-30, 30)) % 360; prevx[i]=px[i]; prevy[i]=py[i];
           sizeMul[i]=0; vBoost[i]=0; hueOff[i]=0; jitAmp[i]=0;
+          alignMul[i]=0; cohesionMul[i]=0; separationMul[i]=0;
         }
       }
 
@@ -429,15 +435,19 @@ DOC = r"""<!doctype html>
           if (total>0) {
             // alignment
             let axv = (vxsum/total) - vx[i]; let ayv = (vysum/total) - vy[i];
-            [axv, ayv] = limit(axv, ayv, CFG.maxForce); ax[i] += axv * CFG.alignW; ay[i] += ayv * CFG.alignW;
+            const alignW = CFG.alignW * (1 + (alignMul[i]||0));
+            [axv, ayv] = limit(axv, ayv, CFG.maxForce);
+            ax[i] += axv * alignW; ay[i] += ayv * alignW;
             // cohesion
             let cxv = (cx/total - px[i]); let cyv = (cy/total - py[i]);
-            [cxv, cyv] = limit(cxv, cyv, CFG.maxForce); ax[i] += cxv * CFG.cohesionW; ay[i] += cyv * CFG.cohesionW;
+            const cohW = CFG.cohesionW * (1 + (cohesionMul[i]||0));
+            [cxv, cyv] = limit(cxv, cyv, CFG.maxForce); ax[i] += cxv * cohW; ay[i] += cyv * cohW;
           }
           if (sclose>0) {
             let sxv = sx; let syv = sy; [sxv, syv] = limit(sxv, syv, CFG.maxForce*1.5);
-            ax[i] += sxv * CFG.separationW; ay[i] += syv * CFG.separationW;
-        }
+            const sepW = CFG.separationW * (1 + (separationMul[i]||0));
+            ax[i] += sxv * sepW; ay[i] += syv * sepW;
+          }
         // optional flow field for pattern variety
         if (CFG.flow) {
           const s = CFG.flowScale || 0.004; const a = CFG.flowAmp || 0.6; const sp = CFG.flowSpeed || 0.6;
@@ -493,6 +503,15 @@ DOC = r"""<!doctype html>
             vx[i] += (Math.random()*2-1) * 1.5*fall; vy[i] += (Math.random()*2-1) * 1.5*fall; jitAmp[i] += 0.3*fall;
           } else if (E.type === 'pulse' || E.type==='ripple') {
             const w = Math.sin(k*Math.PI*2); const s = w * 2.0 * fall; ax[i] += (dx/d)*s; ay[i] += (dy/d)*s;
+          } else if (E.type === 'align') {
+            alignMul[i] += 0.8 * fall; separationMul[i] -= 0.3 * fall;
+          } else if (E.type === 'dealign') {
+            alignMul[i] -= 0.8 * fall; cohesionMul[i] += 0.2 * fall; jitAmp[i] += 0.1 * fall;
+          } else if (E.type === 'cohere' || E.type==='tighten' || E.type==='loosen') {
+            const dir = (E.type==='loosen') ? -1 : 1; // loosen reduces cohesion
+            cohesionMul[i] += dir * 0.9 * fall; if (dir>0) separationMul[i] -= 0.2 * fall;
+          } else if (E.type === 'separate' || E.type==='disperse') {
+            separationMul[i] += 1.0 * fall; cohesionMul[i] -= 0.4 * fall;
           } else if (E.type === 'warp' || E.type==='speedup') {
             vBoost[i] += 0.6*fall; sizeMul[i] += 0.2*fall; hueOff[i] += 40*fall;
           } else if (E.type === 'slowdown') {
@@ -554,6 +573,7 @@ DOC = r"""<!doctype html>
 
           // decay modifiers and compute tint
           vBoost[i] *= 0.92; sizeMul[i] *= 0.90; hueOff[i] *= 0.94; jitAmp[i] *= 0.88;
+          alignMul[i] *= 0.94; cohesionMul[i] *= 0.94; separationMul[i] *= 0.94;
           // slowly drift boid hue back toward base palette hue
           hue[i] = approachHue(hue[i], paletteHue, Math.min(1, dt * (CFG.hueRelax || 0.2)));
           spd[i] = Math.hypot(vx[i], vy[i]);

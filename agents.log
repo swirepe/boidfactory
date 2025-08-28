@@ -15,3 +15,10 @@
 2025-08-28T01:05:00Z Update agents/boids-singlefile-generator.py with rendering and simulation optimizations (trail alpha via globalAlpha, cached trig, adaptive glow, tmp2 reuse, W/H alias, adaptive vision).
 2025-08-28T01:08:00Z add the --index argument to agents/boids-generator.py
 2025-08-28T01:10:00Z drift boid colors back toward base hue in agents/boids-singlefile-generator.py
+2025-08-28T01:13:00Z add click/drag effects that temporarily affect per-boid alignment/cohesion/separation weights in agents/boids-singlefile-generator.py
+==== 2025-08-28T04:07:49Z Prompt Start ====
+there's a bug in show_help() in boidfactory.sh
+==== Prompt End ====
+==== 2025-08-28T04:18:41Z Prompt Start ====
+Let's write a go program (multiple files, templates, etc) where as a command line program it behaves like agents/boids-singlefile-generator.py but it can also be a web server, where /{whatever} is a boids simulation seeded from the value {whatever}
+==== Prompt End ====
