@@ -55,3 +55,6 @@ Ensure flow fields don't push boids out of bounds or get them stuck; enforce min
 ==== 2025-08-28T06:31:52Z Prompt Start ====
 Update the AGENTS.md, add a README.md please
 ==== Prompt End ====
+==== 2025-08-28T07:10:34Z Prompt Start ====
+In template.html, auto-select the first simulation on load instead of waiting for user selection.
+==== Prompt End ====

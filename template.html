@@ -306,6 +306,14 @@ function setAuto(on){
 }
 scheduleAuto();
 
+// Auto-select the first simulation on load if none is selected
+setTimeout(()=>{
+  if (!linkList.querySelector('a.active')){
+    const anchors = getAnchors();
+    if (anchors.length) anchors[0].click();
+  }
+}, 0);
+
 // Setup rainbow controls
 rainbowToggle.checked = !!state.rainbow;
 rainbowSecInput.value = state.rainbowSec;
