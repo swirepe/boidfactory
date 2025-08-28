@@ -1,0 +1,1067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Boids Simulation</title>
+    <style>
+        :root {
+            --hue: 200;
+            --font-mono: 'SF Mono', 'Consolas', 'Courier New', monospace;
+            --primary-color: hsl(var(--hue), 100%, 50%);
+            --secondary-color: hsl(var(--hue), 50%, 70%);
+            --background-color: #1a1a1a;
+            --text-color: #f0f0f0;
+            --overlay-bg-color: rgba(20, 20, 20, 0.9);
+            --border-color: var(--primary-color);
+        }
+        body, html {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: var(--background-color);
+            color: var(--text-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        canvas {
+            display: block;
+            cursor: none;
+        }
+        .overlay {
+            position: fixed;
+            top: 10px;
+            background-color: var(--overlay-bg-color);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 15px;
+            max-height: calc(100vh - 80px);
+            overflow-y: auto;
+            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), opacity 0.4s;
+            transform: translateX(120%);
+            opacity: 0;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            backdrop-filter: blur(5px);
+            z-index: 1002;
+            font-family: var(--font-mono);
+        }
+        .overlay.visible {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        .close-button {
+            position: absolute;
+            top: 5px;
+            right: 10px;
+            background: none;
+            border: none;
+            color: white;
+            font-size: 24px;
+            font-weight: bold;
+            cursor: pointer;
+            padding: 5px;
+            line-height: 1;
+        }
+        .close-button:hover {
+            color: var(--primary-color);
+        }
+        .overlay-toggle-container {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            z-index: 1001;
+        }
+        .overlay-toggle {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            padding: 10px 15px;
+            cursor: pointer;
+            border-radius: 5px;
+            transition: background-color 0.2s, transform 0.2s;
+            font-weight: bold;
+            font-family: var(--font-mono);
+        }
+        .overlay-toggle:hover {
+            background-color: hsl(var(--hue), 100%, 60%);
+            transform: scale(1.05);
+        }
+        #config-overlay { right: 10px; width: 320px; }
+        #stats-overlay { right: 10px; width: 320px; text-align: left; }
+        #help-overlay { right: 10px; width: 450px; }
+
+        #code-pane {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background-color: var(--overlay-bg-color);
+            border-top: 2px solid var(--border-color);
+            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
+            transform: translateY(calc(100% - 40px));
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+        }
+        #code-pane.visible {
+            transform: translateY(0);
+            height: 40vh;
+        }
+        .code-pane-toggle {
+            background-color: var(--primary-color);
+            color: white;
+            border: none;
+            width: 100%;
+            padding: 10px;
+            cursor: pointer;
+            font-size: 16px;
+            font-family: var(--font-mono);
+        }
+        .code-tabs {
+            display: flex;
+            flex-shrink: 0;
+        }
+        .tab-button {
+            flex-grow: 1;
+            padding: 10px;
+            cursor: pointer;
+            background-color: #333;
+            border: none;
+            color: white;
+            border-bottom: 3px solid transparent;
+            transition: background-color 0.2s;
+            font-family: var(--font-mono);
+        }
+        .tab-button.active {
+            background-color: var(--background-color);
+            border-bottom-color: var(--primary-color);
+        }
+        @keyframes flash-success {
+            50% { background-color: hsl(var(--hue), 100%, 30%); }
+        }
+        @keyframes flash-error {
+            50% { background-color: #801c1c; }
+        }
+        .tab-button.reloaded-success {
+            animation: flash-success 0.6s ease-in-out;
+        }
+        .tab-button.reloaded-error {
+            animation: flash-error 0.6s ease-in-out;
+        }
+        .tab-content {
+            display: none;
+            flex-grow: 1;
+        }
+        .tab-content.active {
+            display: block;
+        }
+        .CodeMirror {
+            height: calc(40vh - 80px) !important;
+            border: none;
+        }
+        .config-item {
+            margin-bottom: 12px;
+        }
+        .config-item label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        .config-item input[type="range"], .config-item select {
+            width: 100%;
+        }
+        .config-item select {
+             background-color: #333;
+             color: white;
+             border: 1px solid #555;
+             padding: 5px;
+             border-radius: 3px;
+        }
+        .config-item input[type="color"] {
+            width: 100%;
+            height: 40px;
+            border: none;
+            padding: 0;
+        }
+        h2, h3 {
+            color: var(--primary-color);
+            margin-top: 0;
+            font-family: var(--font-mono);
+            font-weight: 500;
+        }
+        #stats-overlay h3 { color: var(--secondary-color); }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 300px;
+            margin: 0 auto;
+        }
+        .chart-toggle {
+            position: absolute;
+            bottom: 5px;
+            left: 5px;
+            background-color: rgba(0,0,0,0.5);
+            padding: 5px 8px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+        .chart-toggle label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+        .chart-container canvas {
+            background-color: #111;
+            border-radius: 5px;
+            width: 100%;
+            /* aspect-ratio: 1 / 1; */
+            display: block;
+        }
+        #help-overlay code { background-color: #333; padding: 2px 5px; border-radius: 3px; }
+    </style>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/lint.min.css">
+</head>
+<body>
+    <canvas id="boids-canvas"></canvas>
+    
+    <div class="overlay-toggle-container">
+        <button class="overlay-toggle" data-overlay="config-overlay">Config</button>
+        <button class="overlay-toggle" data-overlay="stats-overlay">Stats</button>
+        <button class="overlay-toggle" data-overlay="help-overlay">Help</button>
+    </div>
+
+    <div class="overlay" id="config-overlay"></div>
+    <div class="overlay" id="stats-overlay"></div>
+    <div class="overlay" id="help-overlay"></div>
+
+    <div id="code-pane">
+        <button class="code-pane-toggle">Code</button>
+        <div class="code-tabs">
+            <button class="tab-button active" data-tab="cohesion">Cohesion</button>
+            <button class="tab-button" data-tab="separation">Separation</button>
+            <button class="tab-button" data-tab="alignment">Alignment</button>
+            <button class="tab-button" data-tab="novel">Novel</button>
+        </div>
+        <div id="cohesion" class="tab-content active"><textarea></textarea></div>
+        <div id="separation" class="tab-content"><textarea></textarea></div>
+        <div id="alignment" class="tab-content"><textarea></textarea></div>
+        <div id="novel" class="tab-content"><textarea></textarea></div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/mode/javascript/javascript.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jshint/2.13.4/jshint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/lint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/javascript-lint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.1/chart.min.js"></script>
+    
+    <script>
+    (() => {
+        'use strict';
+
+        // --- GLOBAL STATE & CONSTANTS ---
+        const canvas = document.getElementById('boids-canvas');
+        const ctx = canvas.getContext('2d');
+
+        let config = {};
+        const editors = {};
+        const charts = {};
+        
+        let gameState = {
+            boids: [],
+            quadtree: null,
+            width: 0,
+            height: 0,
+        };
+
+        const mouse = {
+            pos: { x: -1000, y: -1000 },
+            down: false,
+            clickEffect: null
+        };
+
+        let lastTime = 0;
+        let fps = 0;
+        const fpsHistory = [];
+        const updateTimeHistory = [];
+        const angleHistory = [];
+        const MAX_ANGLE_HISTORY = 750;
+
+        const userFunctions = [];
+
+        // --- UTILITY CLASSES & FUNCTIONS ---
+
+        class Vector {
+            constructor(x = 0, y = 0) { this.x = x; this.y = y; }
+            add(v) { this.x += v.x; this.y += v.y; return this; }
+            sub(v) { this.x -= v.x; this.y -= v.y; return this; }
+            mult(s) { this.x *= s; this.y *= s; return this; }
+            div(s) { if (s !== 0) { this.x /= s; this.y /= s; } return this; }
+            mag() { return Math.sqrt(this.x * this.x + this.y * this.y); }
+            normalize() { const m = this.mag(); if (m > 0) this.div(m); return this; }
+            limit(max) { if (this.mag() > max) { this.normalize().mult(max); } return this; }
+            heading() { return Math.atan2(this.y, this.x); }
+            clone() { return new Vector(this.x, this.y); }
+            static sub(v1, v2) { return new Vector(v1.x - v2.x, v1.y - v2.y); }
+            static dist(v1, v2) { return Vector.sub(v1, v2).mag(); }
+            static random2D() { const angle = Math.random() * Math.PI * 2; return new Vector(Math.cos(angle), Math.sin(angle)); }
+        }
+
+        function getURLParams() {
+            const params = new URLSearchParams(window.location.search);
+            const result = {};
+            for (const [key, value] of params) {
+                try {
+                    result[key] = JSON.parse(value);
+                } catch (e) {
+                    result[key] = value;
+                }
+            }
+            return result;
+        }
+
+        function updateURL(key, value) {
+            const params = new URLSearchParams(window.location.search);
+            params.set(key, JSON.stringify(value));
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            window.history.pushState({ path: newUrl }, '', newUrl);
+            logConfig(`URL updated: ${key} = ${JSON.stringify(value)}`);
+        }
+
+        function updateAllURLParams() {
+            if (!config.debug) return;
+            const params = new URLSearchParams();
+            for (const key in config) {
+                params.set(key, JSON.stringify(config[key]));
+            }
+            const newUrl = `${window.location.pathname}?${params.toString()}`;
+            window.history.replaceState({ path: newUrl }, '', newUrl);
+            logConfig('Debug mode: All config params updated in URL.');
+        }
+        
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+
+        function logConfig(...args) {
+            if (config.debug) {
+                console.log('[Boids Log]', ...args);
+            }
+        }
+
+        // --- SIMULATION CORE ---
+
+        class Rectangle {
+            constructor(x, y, w, h) {
+                this.x = x; this.y = y; this.w = w; this.h = h;
+            }
+            contains(boid) {
+                return (boid.pos.x >= this.x - this.w &&
+                        boid.pos.x < this.x + this.w &&
+                        boid.pos.y >= this.y - this.h &&
+                        boid.pos.y < this.y + this.h);
+            }
+            intersects(range) {
+                return !(range.x - range.w > this.x + this.w ||
+                         range.x + range.w < this.x - this.w ||
+                         range.y - range.h > this.y + this.h ||
+                         range.y + range.h < this.y - this.h);
+            }
+        }
+
+        class QuadTree {
+            constructor(boundary, capacity) {
+                this.boundary = boundary;
+                this.capacity = capacity;
+                this.boids = [];
+                this.divided = false;
+            }
+
+            subdivide() {
+                const { x, y, w, h } = this.boundary;
+                const nw = new Rectangle(x - w / 2, y - h / 2, w / 2, h / 2);
+                this.northwest = new QuadTree(nw, this.capacity);
+                const ne = new Rectangle(x + w / 2, y - h / 2, w / 2, h / 2);
+                this.northeast = new QuadTree(ne, this.capacity);
+                const sw = new Rectangle(x - w / 2, y + h / 2, w / 2, h / 2);
+                this.southwest = new QuadTree(sw, this.capacity);
+                const se = new Rectangle(x + w / 2, y + h / 2, w / 2, h / 2);
+                this.southeast = new QuadTree(se, this.capacity);
+                this.divided = true;
+            }
+
+            insert(boid) {
+                if (!this.boundary.contains(boid)) return false;
+                if (this.boids.length < this.capacity) {
+                    this.boids.push(boid);
+                    return true;
+                }
+                if (!this.divided) this.subdivide();
+                return this.northeast.insert(boid) || this.northwest.insert(boid) || this.southeast.insert(boid) || this.southwest.insert(boid);
+            }
+
+            query(range, found = []) {
+                if (!this.boundary.intersects(range)) return found;
+                for (let b of this.boids) {
+                    if (range.contains(b)) found.push(b);
+                }
+                if (this.divided) {
+                    this.northwest.query(range, found);
+                    this.northeast.query(range, found);
+                    this.southwest.query(range, found);
+                    this.southeast.query(range, found);
+                }
+                return found;
+            }
+
+            draw(ctx) {
+                ctx.strokeStyle = `hsla(${config.hue}, 100%, 50%, 0.2)`;
+                ctx.strokeRect(this.boundary.x - this.boundary.w, this.boundary.y - this.boundary.h, this.boundary.w * 2, this.boundary.h * 2);
+                if (this.divided) {
+                    this.northeast.draw(ctx); this.northwest.draw(ctx);
+                    this.southeast.draw(ctx); this.southwest.draw(ctx);
+                }
+            }
+        }
+        
+        class Boid {
+            constructor(x, y) {
+                this.pos = new Vector(x, y);
+                this.vel = Vector.random2D().mult(Math.random() * 2 + 2);
+                this.acc = new Vector();
+                this.maxSpeed = config.maxSpeed;
+                this.maxForce = config.maxForce;
+                this.hue = (config.hue + (Math.random() * 60 - 30) + 360) % 360;
+                this.size = Math.max(1, config.boidSize + (Math.random() * 2 - 1) * config.boidSizeVariance);
+            }
+
+            update(gameState) {
+                const perceptionRadius = config.perceptionRadius;
+                const range = new Rectangle(this.pos.x, this.pos.y, perceptionRadius, perceptionRadius);
+                const neighbors = gameState.quadtree.query(range).filter(other => other !== this);
+                this.acc.mult(0);
+                for (const fn of userFunctions) {
+                    if (fn.weight > 0 && fn.updateBoid) {
+                        const force = fn.updateBoid(this, gameState, neighbors);
+                        if (force instanceof Vector) {
+                           force.mult(fn.weight);
+                           this.acc.add(force);
+                        }
+                    }
+                }
+                this.vel.add(this.acc);
+                this.vel.limit(this.maxSpeed);
+                this.pos.add(this.vel);
+                this.edges();
+            }
+
+            edges() {
+                if (this.pos.x > gameState.width) this.pos.x = 0;
+                else if (this.pos.x < 0) this.pos.x = gameState.width;
+                if (this.pos.y > gameState.height) this.pos.y = 0;
+                else if (this.pos.y < 0) this.pos.y = gameState.height;
+            }
+
+            draw(ctx) {
+                const angle = this.vel.heading();
+                ctx.save();
+                ctx.translate(this.pos.x, this.pos.y);
+                ctx.rotate(angle);
+                ctx.fillStyle = `hsl(${this.hue}, 100%, 70%)`;
+                ctx.strokeStyle = `hsl(${this.hue}, 100%, 70%)`;
+                ctx.beginPath();
+                switch (config.boidShape) {
+                    case 'circle':
+                        ctx.arc(0, 0, this.size / 1.5, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'ring':
+                        ctx.arc(0, 0, this.size / 2, 0, Math.PI * 2);
+                        ctx.lineWidth = Math.max(1, this.size / 4);
+                        ctx.stroke();
+                        break;
+                    case 'oval':
+                        ctx.scale(1.5, 0.6);
+                        ctx.arc(0, 0, this.size / 2, 0, Math.PI * 2);
+                        ctx.fill();
+                        break;
+                    case 'triangle':
+                    default:
+                        ctx.moveTo(this.size, 0);
+                        ctx.lineTo(-this.size / 2, -this.size / 2);
+                        ctx.lineTo(-this.size / 2, this.size / 2);
+                        ctx.closePath();
+                        ctx.fill();
+                        break;
+                }
+                ctx.restore();
+            }
+        }
+
+        // --- DEFAULT USER FUNCTIONS ---
+        
+        const defaultFunctionsCode = {
+            cohesion: `const perceptionRadius = config.perceptionRadius;
+const steering = new Vector();
+let total = 0;
+for (const other of neighbors) {
+    if (Vector.dist(boid.pos, other.pos) < perceptionRadius) {
+        steering.add(other.pos);
+        total++;
+    }
+}
+if (total > 0) {
+    steering.div(total).sub(boid.pos).normalize().mult(boid.maxSpeed).sub(boid.vel).limit(boid.maxForce);
+}
+return steering;`,
+            separation: `const desiredSeparation = config.boidSize * 2.5; // Scale with boid size
+const steering = new Vector();
+let count = 0;
+for (const other of neighbors) {
+    const d = Vector.dist(boid.pos, other.pos);
+    if (d > 0 && d < desiredSeparation) {
+        let diff = Vector.sub(boid.pos, other.pos).normalize().div(d);
+        steering.add(diff);
+        count++;
+    }
+}
+if (count > 0) {
+    steering.div(count).normalize().mult(boid.maxSpeed).sub(boid.vel).limit(boid.maxForce * 1.5);
+}
+return steering;`,
+            alignment: `const perceptionRadius = config.perceptionRadius;
+const steering = new Vector();
+let total = 0;
+for (const other of neighbors) {
+    if (Vector.dist(boid.pos, other.pos) < perceptionRadius) {
+        steering.add(other.vel);
+        total++;
+    }
+}
+if (total > 0) {
+    steering.div(total).normalize().mult(boid.maxSpeed).sub(boid.vel).limit(boid.maxForce);
+}
+return steering;`,
+            novel: `const mouseForce = new Vector();
+const mousePos = new Vector(mouse.pos.x, mouse.pos.y);
+const fleeRadius = 150;
+const distToMouse = Vector.dist(boid.pos, mousePos);
+if (mouse.down && distToMouse < fleeRadius) {
+    let flee = Vector.sub(boid.pos, mousePos);
+    const fleeMagnitude = (fleeRadius - distToMouse) / fleeRadius;
+    flee.normalize().mult(fleeMagnitude * boid.maxSpeed * 2.0).sub(boid.vel).limit(boid.maxForce * 2.0);
+    mouseForce.add(flee);
+}
+return mouseForce;`
+        };
+
+        // --- INITIALIZATION ---
+        
+        function init() {
+            setupCanvas();
+            const urlParams = getURLParams();
+            config = {
+                hue: 200, boidCount: 200, maxSpeed: 3, maxForce: 0.2,
+                perceptionRadius: 50, visualizeQuadtree: true, debug: false,
+                cohesionWeight: 1.0, separationWeight: 1.5, alignmentWeight: 1.0, novelWeight: 1.2,
+                boidShape: 'triangle', boidSize: 10, boidSizeVariance: 2,
+                header: "Boids Simulation", subheader: "Click and drag to interact", ...urlParams
+            };
+            logConfig('Initial config:', config);
+            userFunctions.push(
+                { name: 'cohesion', weight: config.cohesionWeight, updateBoid: null },
+                { name: 'separation', weight: config.separationWeight, updateBoid: null },
+                { name: 'alignment', weight: config.alignmentWeight, updateBoid: null },
+                { name: 'novel', weight: config.novelWeight, updateBoid: null }
+            );
+            setupUI();
+            setupCodePane();
+            createBoids();
+            window.addEventListener('resize', debounce(setupCanvas, 250));
+            canvas.addEventListener('mousemove', e => { mouse.pos.x = e.clientX; mouse.pos.y = e.clientY; });
+            canvas.addEventListener('mousedown', e => { mouse.down = true; });
+            canvas.addEventListener('mouseup', e => { mouse.down = false; });
+            canvas.addEventListener('touchstart', e => { mouse.down = true; updateTouchPos(e); }, {passive: false});
+            canvas.addEventListener('touchend', e => { mouse.down = false; });
+            canvas.addEventListener('touchmove', e => { e.preventDefault(); updateTouchPos(e); }, {passive: false});
+            lastTime = performance.now();
+            animate();
+        }
+
+        function updateTouchPos(e) {
+            if (e.touches && e.touches.length > 0) {
+                mouse.pos.x = e.touches[0].clientX;
+                mouse.pos.y = e.touches[0].clientY;
+            }
+        }
+
+        function setupCanvas() {
+            gameState.width = canvas.width = window.innerWidth;
+            gameState.height = canvas.height = window.innerHeight;
+            if (gameState.boids.length > 0) createBoids();
+        }
+
+        // --- UI SETUP ---
+        function setupUI() {
+            document.documentElement.style.setProperty('--hue', config.hue);
+            document.querySelectorAll('.overlay-toggle').forEach(button => {
+                button.addEventListener('click', () => {
+                    const targetOverlay = document.getElementById(button.dataset.overlay);
+                    const isVisible = targetOverlay.classList.contains('visible');
+                    document.querySelectorAll('.overlay').forEach(o => o.classList.remove('visible'));
+                    if (!isVisible) targetOverlay.classList.add('visible');
+                });
+            });
+            document.querySelectorAll('.overlay').forEach(overlay => {
+                const closeBtn = document.createElement('button');
+                closeBtn.className = 'close-button';
+                closeBtn.innerHTML = '&times;';
+                closeBtn.onclick = () => overlay.classList.remove('visible');
+                overlay.prepend(closeBtn);
+            });
+            document.querySelector('.code-pane-toggle').addEventListener('click', () => {
+                document.getElementById('code-pane').classList.toggle('visible');
+                Object.values(editors).forEach(editor => editor.refresh());
+            });
+            setupConfigUI();
+            setupStatsUI();
+            setupHelpUI();
+        }
+
+        function setupConfigUI() {
+            const container = document.getElementById('config-overlay');
+            container.innerHTML = '<h2>Configuration</h2>';
+            const closeBtn = document.createElement('button');
+            closeBtn.className = 'close-button';
+            closeBtn.innerHTML = '&times;';
+            closeBtn.onclick = () => container.classList.remove('visible');
+            container.prepend(closeBtn);
+            
+            const createSlider = (id, label, min, max, step, value) => {
+                const item = document.createElement('div');
+                item.className = 'config-item';
+                const valueSpan = document.createElement('span');
+                valueSpan.textContent = ` ${Number(value).toFixed(2)}`;
+                item.innerHTML = `<label for="${id}">${label}</label>`;
+                const input = document.createElement('input');
+                input.type = 'range'; input.id = id; input.min = min; input.max = max; input.step = step; input.value = value;
+                input.addEventListener('input', e => {
+                    const newValue = parseFloat(e.target.value);
+                    config[id] = newValue;
+                    valueSpan.textContent = ` ${newValue.toFixed(2)}`;
+                    if (id.endsWith('Weight')) {
+                        const fn = userFunctions.find(f => f.name === id.replace('Weight', ''));
+                        if(fn) fn.weight = newValue;
+                    }
+                    if (config.debug) updateAllURLParams();
+                });
+                input.addEventListener('change', e => {
+                    if (!config.debug) updateURL(id, parseFloat(e.target.value));
+                    if (id === 'boidSize' || id === 'boidSizeVariance' || id === 'boidCount') {
+                        createBoids();
+                    }
+                });
+                item.appendChild(input);
+                item.querySelector('label').appendChild(valueSpan);
+                container.appendChild(item);
+            };
+
+            const createSelect = (id, label, options, value) => {
+                const item = document.createElement('div');
+                item.className = 'config-item';
+                item.innerHTML = `<label for="${id}">${label}</label>`;
+                const select = document.createElement('select');
+                select.id = id;
+                options.forEach(opt => {
+                    const option = document.createElement('option');
+                    option.value = opt;
+                    option.textContent = opt.charAt(0).toUpperCase() + opt.slice(1);
+                    if (opt === value) option.selected = true;
+                    select.appendChild(option);
+                });
+                select.addEventListener('change', e => {
+                    config[id] = e.target.value;
+                    if (config.debug) updateAllURLParams(); else updateURL(id, e.target.value);
+                });
+                item.appendChild(select);
+                container.appendChild(item);
+            };
+
+            createSlider('boidCount', 'Boid Count', 10, 1000, 10, config.boidCount);
+            createSlider('boidSize', 'Boid Size', 2, 20, 1, config.boidSize);
+            createSlider('boidSizeVariance', 'Size Variance', 0, 10, 0.5, config.boidSizeVariance);
+            createSelect('boidShape', 'Boid Shape', ['triangle', 'circle', 'oval', 'ring'], config.boidShape);
+            createSlider('maxSpeed', 'Max Speed', 0.5, 10, 0.1, config.maxSpeed);
+            createSlider('maxForce', 'Max Force', 0.01, 1, 0.01, config.maxForce);
+            createSlider('perceptionRadius', 'Perception', 10, 200, 1, config.perceptionRadius);
+            
+            userFunctions.forEach(fn => {
+                 createSlider(`${fn.name}Weight`, `${fn.name.charAt(0).toUpperCase() + fn.name.slice(1)} Weight`, 0, 5, 0.1, config[`${fn.name}Weight`]);
+            });
+            
+            const createToggle = (id, label, value) => {
+                const item = document.createElement('div');
+                item.innerHTML = `<label class="config-item"><input type="checkbox" id="${id}" ${value ? 'checked' : ''}> ${label}</label>`;
+                item.querySelector('input').addEventListener('change', e => {
+                    config[id] = e.target.checked;
+                    logConfig(`${id} changed to ${config[id]}`);
+                    if (config.debug) updateAllURLParams(); else updateURL(id, config[id]);
+                });
+                container.appendChild(item);
+            };
+            createToggle('visualizeQuadtree', 'Show Quadtree', config.visualizeQuadtree);
+            createToggle('debug', 'Debug Mode', config.debug);
+
+            const colorItem = document.createElement('div');
+            colorItem.className = 'config-item';
+            colorItem.innerHTML = `<label for="hue">Theme Hue</label><input type="color" id="hue-picker" value="${hslToHex(config.hue, 100, 50)}">`;
+            colorItem.querySelector('#hue-picker').addEventListener('input', e => {
+                const hsl = hexToHsl(e.target.value);
+                config.hue = hsl[0];
+                document.documentElement.style.setProperty('--hue', config.hue);
+                if (config.debug) updateAllURLParams(); else updateURL('hue', config.hue);
+            });
+            container.appendChild(colorItem);
+        }
+        
+        function setupStatsUI() {
+            const container = document.getElementById('stats-overlay');
+            container.innerHTML = `
+                <button class="close-button">&times;</button>
+                <h2>Statistics</h2>
+                <p>Particle Count: <span id="particle-count">0</span></p>
+                <p>FPS: <span id="fps-counter">0</span></p>
+                <div><canvas id="fps-chart" height="80"></canvas></div>
+                <p>Update Time: <span id="update-time">0.00</span> ms</p>
+                <p>(Mean: <span id="update-time-mean">0.00</span>, StdDev: <span id="update-time-stddev">0.00</span>)</p>
+                <div><canvas id="update-time-chart" height="80"></canvas></div>
+                <h3>Flock Coherence</h3>
+                <div class="chart-container"><canvas id="polar-spiral-chart"></canvas></div>
+                <h3>Mean Direction</h3>
+                <div class="chart-container">
+                    <canvas id="mean-polar-chart"></canvas>
+                    <div class="chart-toggle">
+                        <label><input type="checkbox" id="show-stdev-bands" checked>Show StdDev Bands</label>
+                    </div>
+                </div>
+            `;
+            container.querySelector('.close-button').onclick = () => container.classList.remove('visible');
+            
+            charts.fpsChart = new Chart(document.getElementById('fps-chart').getContext('2d'), {
+                type: 'line',
+                data: { labels: Array(50).fill(''), datasets: [{ label: 'FPS', data: Array(50).fill(0), borderColor: `hsl(${config.hue}, 100%, 50%)`, borderWidth: 1, pointRadius: 0, tension: 0.4 }] },
+                options: { scales: { y: { beginAtZero: true, max: 70 } } }
+            });
+
+            charts.updateTimeChart = new Chart(document.getElementById('update-time-chart').getContext('2d'), {
+                type: 'line',
+                data: { labels: Array(50).fill(''), datasets: [{ label: 'Update Time (ms)', data: Array(50).fill(0), borderColor: `hsl(${(config.hue + 120) % 360}, 100%, 50%)`, borderWidth: 1, pointRadius: 0, tension: 0.4 }] },
+                options: { scales: { y: { beginAtZero: true } } }
+            });
+
+            charts.polarCtx = document.getElementById('polar-spiral-chart').getContext('2d');
+            charts.meanPolarCtx = document.getElementById('mean-polar-chart').getContext('2d');
+            charts.showStdDevBands = document.getElementById('show-stdev-bands');
+        }
+        
+        function setupHelpUI() {
+            const container = document.getElementById('help-overlay');
+            container.innerHTML = `<button class="close-button">&times;</button><h2>Boids Simulation</h2> <p>This is an interactive simulation of flocking behavior, inspired by Craig Reynolds' Boids algorithm.</p> <h3>Configuration</h3> <p>All configuration options are available as URL parameters.</p> <ul><li><b>boidCount, boidSize, boidSizeVariance, boidShape</b></li><li><b>maxSpeed, maxForce, perceptionRadius</b></li><li><b>cohesionWeight, separationWeight, etc.</b></li><li><b>visualizeQuadtree, debug, hue</b></li></ul> <h3>Change Log</h3><p>v1.7 - Added visual success/error indicators for live code reloading.<br>v1.6 - Added boid shape/size configs and monospace font styling.<br>v1.5 - Added beautiful mean direction polar chart with togglable stdev bands.<br>v1.4 - Added close buttons and expanded statistics panel.<br>v1.3 - Fixed critical scope error for dynamic code.<br>v1.2 - Added dynamic polar spiral graph for flock coherence.<br>v1.1 - Fixed critical errors related to dynamic function creation.<br>v1.0 - Initial implementation.</p>`;
+            container.querySelector('.close-button').onclick = () => container.classList.remove('visible');
+        }
+
+        function setupCodePane() {
+            const tabs = document.querySelectorAll('.tab-button');
+            const contents = document.querySelectorAll('.tab-content');
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    tabs.forEach(t => t.classList.remove('active'));
+                    contents.forEach(c => c.classList.remove('active'));
+                    tab.classList.add('active');
+                    document.getElementById(tab.dataset.tab).classList.add('active');
+                    editors[tab.dataset.tab].refresh();
+                });
+            });
+
+            for (const fn of userFunctions) {
+                const textarea = document.querySelector(`#${fn.name} textarea`);
+                textarea.value = defaultFunctionsCode[fn.name];
+                editors[fn.name] = CodeMirror.fromTextArea(textarea, {
+                    mode: 'javascript', theme: 'dracula', lineNumbers: true,
+                    lint: true, gutters: ["CodeMirror-lint-markers"],
+                });
+
+                const updateFunction = debounce((editor) => {
+                    const tabButton = document.querySelector(`.tab-button[data-tab="${fn.name}"]`);
+                    try {
+                        const code = editor.getValue();
+                        const params = ['boid', 'gameState', 'neighbors', 'config', 'mouse', 'Vector'];
+                        const dynamicFunc = new Function(...params, code);
+                        fn.updateBoid = (boid, gameState, neighbors) => {
+                            return dynamicFunc(boid, gameState, neighbors, config, mouse, Vector);
+                        };
+                        
+                        console.log(`Rule '${fn.name}' reloaded successfully.`);
+                        logConfig(`Rule '${fn.name}' reloaded successfully.`);
+                        if (tabButton) {
+                           tabButton.classList.add('reloaded-success');
+                           setTimeout(() => tabButton.classList.remove('reloaded-success'), 600);
+                        }
+                    } catch (e) {
+                        console.error(`Error reloading rule '${fn.name}':`, e);
+                        fn.updateBoid = () => new Vector(); // Failsafe
+                        if (tabButton) {
+                           tabButton.classList.add('reloaded-error');
+                           setTimeout(() => tabButton.classList.remove('reloaded-error'), 600);
+                        }
+                    }
+                }, 500);
+                editors[fn.name].on('change', updateFunction);
+                updateFunction(editors[fn.name]); // Initial compilation
+            }
+        }
+        
+        // --- SIMULATION LOGIC ---
+
+        function createBoids() {
+            gameState.boids = [];
+            for (let i = 0; i < config.boidCount; i++) {
+                gameState.boids.push(new Boid(Math.random() * gameState.width, Math.random() * gameState.height));
+            }
+            logConfig(`Created ${config.boidCount} boids.`);
+        }
+
+        // --- MAIN LOOP ---
+
+        function animate(timestamp) {
+            const deltaTime = (timestamp - lastTime) || 0;
+            lastTime = timestamp;
+            fps = 1000 / deltaTime;
+            const t0 = performance.now();
+            update();
+            const updateTime = performance.now() - t0;
+            draw();
+            updateStats(updateTime);
+            requestAnimationFrame(animate);
+        }
+
+        function update() {
+            const boundary = new Rectangle(gameState.width / 2, gameState.height / 2, gameState.width / 2, gameState.height / 2);
+            gameState.quadtree = new QuadTree(boundary, 4);
+            for (let boid of gameState.boids) gameState.quadtree.insert(boid);
+            for (let boid of gameState.boids) boid.update(gameState);
+        }
+
+        function draw() {
+            ctx.fillStyle = 'rgba(26, 26, 26, 0.25)';
+            ctx.fillRect(0, 0, gameState.width, gameState.height);
+            if (config.visualizeQuadtree) gameState.quadtree.draw(ctx);
+            for (let boid of gameState.boids) boid.draw(ctx);
+            if (mouse.down) {
+                 ctx.beginPath();
+                 ctx.arc(mouse.pos.x, mouse.pos.y, 150, 0, Math.PI * 2);
+                 const gradient = ctx.createRadialGradient(mouse.pos.x, mouse.pos.y, 10, mouse.pos.x, mouse.pos.y, 150);
+                 gradient.addColorStop(0, `hsla(${config.hue}, 100%, 50%, 0.3)`);
+                 gradient.addColorStop(1, `hsla(${config.hue}, 100%, 50%, 0)`);
+                 ctx.fillStyle = gradient;
+                 ctx.fill();
+            }
+            ctx.fillStyle = `hsl(${config.hue}, 100%, 50%)`;
+            ctx.beginPath();
+            ctx.arc(mouse.pos.x, mouse.pos.y, 5, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = `hsla(${config.hue}, 100%, 80%, 0.8)`;
+            ctx.font = 'bold 36px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText(config.header, gameState.width / 2, 50);
+            ctx.font = '24px sans-serif';
+            ctx.fillText(config.subheader, gameState.width / 2, 90);
+        }
+
+        function updateStats(updateTime) {
+            if (isFinite(fps)) {
+                document.getElementById('fps-counter').textContent = Math.round(fps);
+                fpsHistory.push(fps);
+                if (fpsHistory.length > 50) fpsHistory.shift();
+                charts.fpsChart.data.datasets[0].data = fpsHistory;
+                charts.fpsChart.update('none');
+            }
+            document.getElementById('particle-count').textContent = Math.round(config.boidCount);
+            if (isFinite(updateTime)) {
+                document.getElementById('update-time').textContent = updateTime.toFixed(2);
+                updateTimeHistory.push(updateTime);
+                if (updateTimeHistory.length > 50) updateTimeHistory.shift();
+                const mean = updateTimeHistory.reduce((a, b) => a + b, 0) / updateTimeHistory.length;
+                const stdDev = Math.sqrt(updateTimeHistory.map(x => Math.pow(x - mean, 2)).reduce((a, b) => a + b, 0) / updateTimeHistory.length);
+                document.getElementById('update-time-mean').textContent = mean.toFixed(2);
+                document.getElementById('update-time-stddev').textContent = stdDev.toFixed(2);
+                charts.updateTimeChart.data.datasets[0].data = updateTimeHistory;
+                charts.updateTimeChart.update('none');
+            }
+            if (gameState.boids.length > 0) {
+                const sumVec = new Vector(0, 0);
+                for (const boid of gameState.boids) sumVec.add(boid.vel.clone().normalize());
+                const meanAngle = sumVec.heading();
+                const R = sumVec.mag() / gameState.boids.length;
+                const stdDev = R < 1 ? Math.sqrt(-2 * Math.log(R)) : 0;
+                angleHistory.push({ meanAngle, stdDev });
+                if (angleHistory.length > MAX_ANGLE_HISTORY) angleHistory.shift();
+            }
+            drawPolarSpiralChart();
+            drawMeanPolarChart();
+        }
+
+        function drawPolarSpiralChart() {
+            if (!charts.polarCtx || angleHistory.length < 2) return;
+            const ctx = charts.polarCtx;
+            const canvas = ctx.canvas;
+            const { width, height } = canvas;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const maxRadius = Math.min(centerX, centerY) * 0.9;
+            ctx.fillStyle = '#1a1a1a';
+            ctx.fillRect(0, 0, width, height);
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i <= 4; i++) {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, (maxRadius / 4) * i, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            ctx.beginPath();
+            for (let i = 0; i < angleHistory.length; i++) {
+                const record = angleHistory[i];
+                const radius = Math.min(record.stdDev / Math.sqrt(2), 1.0) * maxRadius;
+                const x = centerX + radius * Math.cos(record.meanAngle);
+                const y = centerY + radius * Math.sin(record.meanAngle);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = `hsl(${config.hue}, 100%, 50%)`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            const lastRecord = angleHistory[angleHistory.length - 1];
+            const lastRadius = Math.min(lastRecord.stdDev / Math.sqrt(2), 1.0) * maxRadius;
+            const lastX = centerX + lastRadius * Math.cos(lastRecord.meanAngle);
+            const lastY = centerY + lastRadius * Math.sin(lastRecord.meanAngle);
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+        }
+
+        function drawMeanPolarChart() {
+            if (!charts.meanPolarCtx || angleHistory.length < 2) return;
+            const ctx = charts.meanPolarCtx;
+            const canvas = ctx.canvas;
+            const { width, height } = canvas;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const maxRadius = Math.min(centerX, centerY) * 0.9;
+
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, width, height);
+            const bgGradient = ctx.createRadialGradient(centerX, centerY, 5, centerX, centerY, maxRadius);
+            bgGradient.addColorStop(0, '#222');
+            bgGradient.addColorStop(1, '#111');
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, maxRadius, 0, Math.PI * 2);
+            ctx.fillStyle = bgGradient;
+            ctx.fill();
+
+            ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+            ctx.lineWidth = 1;
+            for (let i = 1; i <= 4; i++) {
+                ctx.beginPath();
+                ctx.arc(centerX, centerY, (maxRadius / 4) * i, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            for (let i = 0; i < 8; i++) {
+                ctx.beginPath();
+                ctx.moveTo(centerX, centerY);
+                ctx.lineTo(centerX + maxRadius * Math.cos(i * Math.PI / 4), centerY + maxRadius * Math.sin(i * Math.PI / 4));
+                ctx.stroke();
+            }
+
+            if (charts.showStdDevBands.checked) {
+                ctx.beginPath();
+                for (let i = 0; i < angleHistory.length; i++) {
+                    const radius = (i / MAX_ANGLE_HISTORY) * maxRadius;
+                    const x = centerX + radius * Math.cos(angleHistory[i].meanAngle + angleHistory[i].stdDev);
+                    const y = centerY + radius * Math.sin(angleHistory[i].meanAngle + angleHistory[i].stdDev);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                for (let i = angleHistory.length - 1; i >= 0; i--) {
+                    const radius = (i / MAX_ANGLE_HISTORY) * maxRadius;
+                    const x = centerX + radius * Math.cos(angleHistory[i].meanAngle - angleHistory[i].stdDev);
+                    const y = centerY + radius * Math.sin(angleHistory[i].meanAngle - angleHistory[i].stdDev);
+                    ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.fillStyle = `hsla(${config.hue}, 100%, 50%, 0.15)`;
+                ctx.fill();
+            }
+            
+            ctx.beginPath();
+            for (let i = 0; i < angleHistory.length; i++) {
+                const radius = (i / MAX_ANGLE_HISTORY) * maxRadius;
+                const x = centerX + radius * Math.cos(angleHistory[i].meanAngle);
+                const y = centerY + radius * Math.sin(angleHistory[i].meanAngle);
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+            }
+            const lineGradient = ctx.createLinearGradient(centerX - maxRadius, centerY, centerX + maxRadius, centerY);
+            lineGradient.addColorStop(0, `hsl(${config.hue}, 100%, 30%)`);
+            lineGradient.addColorStop(0.5, `hsl(${config.hue}, 100%, 50%)`);
+            lineGradient.addColorStop(1, `hsl(${config.hue}, 100%, 70%)`);
+            ctx.strokeStyle = lineGradient;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+
+            const lastRecord = angleHistory[angleHistory.length - 1];
+            const lastRadius = ((angleHistory.length - 1) / MAX_ANGLE_HISTORY) * maxRadius;
+            const lastX = centerX + lastRadius * Math.cos(lastRecord.meanAngle);
+            const lastY = centerY + lastRadius * Math.sin(lastRecord.meanAngle);
+            ctx.beginPath();
+            ctx.arc(lastX, lastY, 4, 0, Math.PI * 2);
+            ctx.fillStyle = 'white';
+            ctx.fill();
+
+            const meanDeg = (lastRecord.meanAngle * 180 / Math.PI + 360) % 360;
+            const stdDevDeg = lastRecord.stdDev * 180 / Math.PI;
+            ctx.font = `12px ${getComputedStyle(document.documentElement).getPropertyValue('--font-mono')}`;
+            ctx.fillStyle = '#ccc';
+            ctx.textAlign = 'left';
+            ctx.fillText(`Mean: ${meanDeg.toFixed(1)}°`, 10, 20);
+            ctx.fillText(`StdDev: ${stdDevDeg.toFixed(1)}°`, 10, 35);
+        }
+
+        // --- COLOR HELPERS ---
+        function hslToHex(h, s, l) {
+            l /= 100; const a = s * Math.min(l, 1 - l) / 100;
+            const f = n => { const k = (n + h / 30) % 12; const color = l - a * Math.max(Math.min(k - 3, 9 - k, 1), -1); return Math.round(255 * color).toString(16).padStart(2, '0'); };
+            return `#${f(0)}${f(8)}${f(4)}`;
+        }
+        function hexToHsl(hex) {
+            let r=0,g=0,b=0; if(hex.length==4){r=parseInt(hex[1]+hex[1],16);g=parseInt(hex[2]+hex[2],16);b=parseInt(hex[3]+hex[3],16);}else if(hex.length==7){r=parseInt(hex[1]+hex[2],16);g=parseInt(hex[3]+hex[4],16);b=parseInt(hex[5]+hex[6],16);}
+            r/=255;g/=255;b/=255; let cmin=Math.min(r,g,b),cmax=Math.max(r,g,b),delta=cmax-cmin,h=0,s=0,l=0;
+            if(delta==0)h=0;else if(cmax==r)h=((g-b)/delta)%6;else if(cmax==g)h=(b-r)/delta+2;else h=(r-g)/delta+4;
+            h=Math.round(h*60); if(h<0)h+=360; l=(cmax+cmin)/2; s=delta==0?0:delta/(1-Math.abs(2*l-1)); s=+(s*100).toFixed(1);l=+(l*100).toFixed(1); return[h,s,l];
+        }
+
+        // --- START ---
+        init();
+    })();
+    </script>
+</body>
+</html>
