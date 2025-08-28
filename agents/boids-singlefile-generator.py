@@ -40,7 +40,7 @@ DOC = r"""<!doctype html>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Boids · Data-Oriented + Quadtree (Single File)</title>
+    <title>__TITLE__</title>
     <style>
       html, body { height: 100%; margin: 0; }
       body {
@@ -55,6 +55,15 @@ DOC = r"""<!doctype html>
       .subtitle { margin: 0 20px 10px; font-weight: 500; font-size: clamp(12px, 2vw, 16px); opacity: 0.85; }
       .hud { position: fixed; left: 12px; bottom: 12px; padding: 8px 10px; border-radius: 10px; border: 1px solid #00000040; background: #0b1220cc; backdrop-filter: blur(8px) saturate(120%); font-size: 12px; line-height: 1.4; }
       .hud strong { color: var(--accent, #7dd3fc); }
+      .cfgBtn { position: fixed; top: 12px; right: 12px; z-index: 10; pointer-events: auto; border: 1px solid #00000055; background: #0b1220cc; color: #e6edf3; border-radius: 8px; padding: 6px 8px; cursor: pointer; }
+      .configPanel { position: fixed; top: 56px; right: 12px; width: min(380px, 90vw); max-height: 80vh; overflow: auto; z-index: 20; pointer-events: auto; background: #0b1220e6; color: #e6edf3; border: 1px solid #00000055; border-radius: 10px; box-shadow: 0 10px 40px #0008; backdrop-filter: blur(10px) saturate(120%); }
+      .configHeader { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #00000055; position: sticky; top: 0; background: #0b1220f2; }
+      .configBody { padding: 10px 12px; display: grid; gap: 10px; }
+      .configBody .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+      .configBody .rangeRow { display: grid; grid-template-columns: 1fr 72px; gap: 8px; }
+      .cfgClose { border: 1px solid #00000055; background: #121a2bcc; color: #e6edf3; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+      .configBody input, .configBody select { font-size: 14px; padding: 6px 8px; background: #101827; color: #e6edf3; border: 1px solid #00000055; border-radius: 6px; }
+      .configBody input[type=range] { padding: 0; height: 28px; accent-color: var(--accent, #7dd3fc); background: transparent; }
     </style>
   </head>
   <body>
@@ -64,6 +73,14 @@ DOC = r"""<!doctype html>
       <div class="subtitle" id="subtitle"></div>
       <div class="hud" id="hud"></div>
     </div>
+    <button id="cfgBtn" class="cfgBtn" aria-label="Open config">⚙︎</button>
+    <div id="config" class="configPanel" hidden>
+      <div class="configHeader">
+        <strong>Config</strong>
+        <button id="cfgClose" class="cfgClose" aria-label="Close">✕</button>
+      </div>
+      <div id="configBody" class="configBody"></div>
+    </div>
     <script>
       'use strict';
 
@@ -71,9 +88,10 @@ DOC = r"""<!doctype html>
       const params = new URLSearchParams(location.search);
       const DEFAULT_HUE = __DEFAULT_HUE__;
       const BASE_HUE = clampInt(parseInt(params.get('hue')), 0, 360, DEFAULT_HUE);
+      let paletteHue = BASE_HUE;
       const HEADER = params.get('header') || 'Boids — Data-Oriented + Quadtree';
       const SUBHEADER = params.get('subheader') || 'Shockwaves on click/drag · quadtree viz on';
-      const SHOW_QT = params.get('qt') !== '0'; // enabled by default
+      // Quadtree viz is handled by CFG.qt; URL param 'qt' overrides it.
 
       // DOM
       const canvas = document.getElementById('scene');
@@ -83,12 +101,57 @@ DOC = r"""<!doctype html>
       const hudEl = document.getElementById('hud');
 
       // Style hook
-      document.documentElement.style.setProperty('--accent', `hsl(${BASE_HUE}, 85%, 62%)`);
+      document.documentElement.style.setProperty('--accent', `hsl(${paletteHue}, 85%, 62%)`);
       titleEl.textContent = HEADER;
       subtitleEl.textContent = SUBHEADER;
 
-      // Config (injected by generator)
-      const CFG = Object.freeze(__CFG__);
+      // Config (injected by generator) — mutable at runtime
+      let CFG = __CFG__;
+      CFG.minSpeed = CFG.minSpeed ?? 0.8;
+      CFG.qt = (typeof CFG.qt === 'boolean') ? CFG.qt : true;
+      CFG.clickMode = CFG.clickMode || 'random';
+      CFG.clickModes = CFG.clickModes || [
+        'shock','vortex','implosion','spray','stun','fear','attract','orbitCW','orbitCCW',
+        'spiralOut','spiralIn','freeze','scramble','scatter','magnet','pulse',
+        'warp','grow','tunnel','ripple','jitterburst','chromaburst','slowdown','speedup',
+        'perlinDrag','lissaPulse','meteor'
+      ];
+
+      function parseBool(v, d) {
+        if (v == null) return d;
+        const s = String(v).toLowerCase();
+        if (['1','true','yes','on'].includes(s)) return true;
+        if (['0','false','no','off'].includes(s)) return false;
+        return d;
+      }
+
+      // URL overrides for config
+      (function urlOverride(){
+        const intKeys = ['count','vision','sep','qtCap','bgHueShift1','bgHueShift2','bgHueShift3'];
+        const numKeys = ['maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','glowBase','glowMax','glowScale','cometSize','flowAmp','flowScale','flowSpeed'];
+        const boolKeys = ['wrap','bgGradient','qt','flow','showHud'];
+        const strKeys = ['shape','blend','spawn'];
+        for (const k of intKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Math.max(-99999, Math.min(99999, parseInt(v))); }
+        for (const k of numKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Number(v); }
+        for (const k of boolKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = parseBool(v, CFG[k]); }
+        for (const k of strKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = v; }
+        const cm = params.get('clickMode'); if (cm) CFG.clickMode = cm;
+        const cms = params.get('clickModes'); if (cms) CFG.clickModes = cms.split(',');
+      })();
+
+      function updateUrlFromCfg(extra={}) {
+        const url = new URL(location.href);
+        url.searchParams.set('hue', paletteHue);
+        url.searchParams.set('header', titleEl.textContent);
+        url.searchParams.set('subheader', subtitleEl.textContent);
+        const keys = ['count','vision','sep','maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','qtCap','wrap','shape','blend','lineWidth','glowBase','glowMax','glowScale','cometSize','bgGradient','bgHueShift1','bgHueShift2','bgHueShift3','qt','clickMode','clickModes','flow','flowAmp','flowScale','flowSpeed','spawn','showHud'];
+        for (const k of keys) url.searchParams.set(k, String(CFG[k]));
+        if (CFG.clickModes && Array.isArray(CFG.clickModes)) url.searchParams.set('clickModes', CFG.clickModes.join(','));
+        for (const [k,v] of Object.entries(extra)) url.searchParams.set(k, v);
+        history.replaceState(null, '', url.toString());
+      }
+
+      const TAU = Math.PI * 2;
 
       // Canvas sizing with DPR
       let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
@@ -106,9 +169,9 @@ DOC = r"""<!doctype html>
         if (CFG.bgGradient) {
           const g = ctx.createRadialGradient(innerWidth*0.65, innerHeight*0.35, Math.min(innerWidth, innerHeight)*0.15,
                                              innerWidth*0.5, innerHeight*0.5, Math.hypot(innerWidth, innerHeight)*0.7);
-          g.addColorStop(0.0, `hsl(${(BASE_HUE+CFG.bgHueShift1)%360} 80% 10%)`);
-          g.addColorStop(0.5, `hsl(${(BASE_HUE+CFG.bgHueShift2)%360} 70% 8%)`);
-          g.addColorStop(1.0, `hsl(${(BASE_HUE+CFG.bgHueShift3)%360} 60% 6%)`);
+          g.addColorStop(0.0, `hsl(${(paletteHue+CFG.bgHueShift1)%360} 80% 10%)`);
+          g.addColorStop(0.5, `hsl(${(paletteHue+CFG.bgHueShift2)%360} 70% 8%)`);
+          g.addColorStop(1.0, `hsl(${(paletteHue+CFG.bgHueShift3)%360} 60% 6%)`);
           ctx.fillStyle = g;
         } else {
           ctx.fillStyle = '#05070a';
@@ -121,31 +184,75 @@ DOC = r"""<!doctype html>
         return Math.max(lo, Math.min(hi, n));
       }
 
+      // Lightweight 2D value noise (for perlin-like drag)
+      let noiseSeed = (BASE_HUE * 1664525 + 1013904223) & 0xffffffff;
+      function fract(x){ return x - Math.floor(x); }
+      function _rand(ix, iy){
+        const k = (ix * 374761393 + iy * 668265263 + noiseSeed) >>> 0;
+        return fract(Math.sin(k) * 43758.5453);
+      }
+      function noise2(x, y){
+        const xi = Math.floor(x), yi = Math.floor(y);
+        const xf = x - xi, yf = y - yi;
+        const u = xf*xf*(3-2*xf), v = yf*yf*(3-2*yf);
+        const v00 = _rand(xi, yi), v10 = _rand(xi+1, yi), v01 = _rand(xi, yi+1), v11 = _rand(xi+1, yi+1);
+        const x1 = v00*(1-u) + v10*u, x2 = v01*(1-u) + v11*u;
+        return x1*(1-v) + x2*v;
+      }
+      function perlinVec(x, y, scale, amp){
+        const n = noise2(x*scale, y*scale);
+        const a = n * TAU;
+        return [Math.cos(a)*amp, Math.sin(a)*amp];
+      }
+
       // Seeded PRNG for subtle determinism from BASE_HUE
       let _seed = (BASE_HUE * 9301 + 49297) % 233280;
       function rnd() { _seed = (1103515245 * _seed + 12345) & 0x7fffffff; return (_seed >>> 8) / 0x7fffff; }
       function rand(min, max) { return rnd() * (max - min) + min; }
 
-      // Data-Oriented State (SoA)
-      const N = CFG.count;
-      const px = new Float32Array(N);
-      const py = new Float32Array(N);
-      const vx = new Float32Array(N);
-      const vy = new Float32Array(N);
-      const ax = new Float32Array(N);
-      const ay = new Float32Array(N);
-      const hue = new Float32Array(N);
-      const spd = new Float32Array(N);
-      const prevx = new Float32Array(N);
-      const prevy = new Float32Array(N);
+      // Data-Oriented State (SoA) — dynamic
+      let N = CFG.count;
+      let px, py, vx, vy, ax, ay, hue, spd, prevx, prevy;
+      // transient per-boid modifiers (decay each frame)
+      let sizeMul, vBoost, hueOff, jitAmp;
 
-      for (let i = 0; i < N; i++) {
-        px[i] = rand(0, innerWidth); py[i] = rand(0, innerHeight);
-        vx[i] = rand(-1, 1); vy[i] = rand(-1, 1);
-        const m = Math.hypot(vx[i], vy[i]) || 1; vx[i] *= 2.0/m; vy[i] *= 2.0/m;
-        hue[i] = (BASE_HUE + rand(-30, 30)) % 360;
-        prevx[i] = px[i]; prevy[i] = py[i];
+      function alloc(n) {
+        px = new Float32Array(n); py = new Float32Array(n);
+        vx = new Float32Array(n); vy = new Float32Array(n);
+        ax = new Float32Array(n); ay = new Float32Array(n);
+        hue = new Float32Array(n); spd = new Float32Array(n);
+        prevx = new Float32Array(n); prevy = new Float32Array(n);
+        sizeMul = new Float32Array(n); vBoost = new Float32Array(n); hueOff = new Float32Array(n); jitAmp = new Float32Array(n);
       }
+
+      function seedBoids() {
+        const mode = CFG.spawn || 'random';
+        if (mode === 'circle') {
+          const cx = innerWidth/2, cy = innerHeight/2, r = Math.min(innerWidth, innerHeight)/3;
+          for (let i=0;i<N;i++) { const t = Math.random()*Math.PI*2; px[i]=cx+Math.cos(t)*r; py[i]=cy+Math.sin(t)*r; vx[i]=rand(-1,1); vy[i]=rand(-1,1); }
+        } else if (mode === 'grid') {
+          const cols=Math.max(10, Math.floor(Math.sqrt(N))); const rows=Math.ceil(N/cols);
+          const gx=innerWidth/(cols+1), gy=innerHeight/(rows+1); let k=0;
+          for (let y=1;y<=rows;y++) for (let x=1;x<=cols;x++) { if (k>=N) break; px[k]=gx*x; py[k]=gy*y; vx[k]=rand(-1,1); vy[k]=rand(-1,1); k++; }
+        } else if (mode === 'centerburst') {
+          const cx=innerWidth/2, cy=innerHeight/2;
+          for (let i=0;i<N;i++) { const a=Math.random()*Math.PI*2, d=rand(0, Math.min(innerWidth,innerHeight)/2); px[i]=cx+Math.cos(a)*d; py[i]=cy+Math.sin(a)*d; vx[i]=Math.cos(a); vy[i]=Math.sin(a); }
+        } else { // random
+          for (let i=0;i<N;i++) { px[i]=rand(0,innerWidth); py[i]=rand(0,innerHeight); vx[i]=rand(-1,1); vy[i]=rand(-1,1); }
+        }
+        for (let i=0;i<N;i++) {
+          const m=Math.hypot(vx[i],vy[i])||1; vx[i]*=2.0/m; vy[i]*=2.0/m;
+          hue[i] = (paletteHue + rand(-30, 30)) % 360; prevx[i]=px[i]; prevy[i]=py[i];
+          sizeMul[i]=0; vBoost[i]=0; hueOff[i]=0; jitAmp[i]=0;
+        }
+      }
+
+      function reseed(n) {
+        N = Math.max(1, Math.floor(n));
+        alloc(N); seedBoids();
+      }
+
+      alloc(N); seedBoids();
 
       // Quadtree implementation
       class QTNode {
@@ -209,7 +316,7 @@ DOC = r"""<!doctype html>
 
         draw(ctx) {
           ctx.save();
-          ctx.strokeStyle = `hsl(${(BASE_HUE+180)%360} 80% 70% / 0.14)`;
+          ctx.strokeStyle = `hsl(${(paletteHue+180)%360} 80% 70% / 0.14)`;
           ctx.lineWidth = 1;
           this._drawNode(ctx, this.root);
           ctx.restore();
@@ -221,14 +328,51 @@ DOC = r"""<!doctype html>
       }
 
       // Interaction effects
-      const effects = []; // {x,y,t,life,sign}
+      const effects = []; // {x,y,t,life,sign,type,...extras}
       let mouseDown = false;
-      addEventListener('pointerdown', e => { mouseDown = true; spawnShock(e.clientX, e.clientY, +1); });
-      addEventListener('pointerup',   e => { mouseDown = false; spawnShock(e.clientX, e.clientY, -1); });
-      addEventListener('pointermove', e => { if (mouseDown) spawnShock(e.clientX, e.clientY, +1); });
+      const pointer = {x: innerWidth/2, y: innerHeight/2, vx: 0, vy: 0, t: performance.now()};
+      addEventListener('pointerdown', e => {
+        const now = performance.now();
+        const dt = Math.max(1, now - pointer.t);
+        pointer.vx = (e.clientX - pointer.x) / dt; pointer.vy = (e.clientY - pointer.y) / dt; pointer.t = now;
+        pointer.x = e.clientX; pointer.y = e.clientY;
+        mouseDown = true; spawnEffect(pointer.x, pointer.y, +1);
+      }, {passive:true});
+      addEventListener('pointerup',   e => {
+        const now = performance.now();
+        const dt = Math.max(1, now - pointer.t);
+        pointer.vx = (e.clientX - pointer.x) / dt; pointer.vy = (e.clientY - pointer.y) / dt; pointer.t = now;
+        pointer.x = e.clientX; pointer.y = e.clientY;
+        mouseDown = false; spawnEffect(pointer.x, pointer.y, -1);
+      }, {passive:true});
+      addEventListener('pointermove', e => {
+        const now = performance.now();
+        const dt = Math.max(1, now - pointer.t);
+        pointer.vx = (e.clientX - pointer.x) / dt; pointer.vy = (e.clientY - pointer.y) / dt; pointer.t = now;
+        pointer.x = e.clientX; pointer.y = e.clientY;
+        if (mouseDown) spawnEffect(pointer.x, pointer.y, +1);
+      }, {passive:true});
 
-      function spawnShock(x, y, sign) {
-        effects.push({ x, y, t: 0, life: 1.2, sign });
+      function pickClickType() {
+        if (CFG.clickMode && CFG.clickMode !== 'random') return CFG.clickMode;
+        const list = CFG.clickModes || ['shock'];
+        return list[Math.floor(Math.random()*list.length)] || 'shock';
+      }
+      function spawnEffect(x, y, sign) {
+        const type = pickClickType();
+        const life = (type==='implosion') ? 0.9 : (type==='vortex' || type==='meteor' ? 1.8 : 1.2);
+        const E = { x, y, t: 0, life, sign, type };
+        if (type === 'lissaPulse') {
+          const sp = Math.min(3, Math.hypot(pointer.vx, pointer.vy)*120);
+          E.a = 2 + Math.floor(sp%4); E.b = 3 + Math.floor((sp*1.7)%4); E.phase = Math.random()*TAU;
+        }
+        if (type === 'meteor') {
+          const scale = 900; E.vx = pointer.vx*scale; E.vy = pointer.vy*scale; E.mass = 220 + Math.random()*180; E.drag=0.98;
+        }
+        if (type === 'perlinDrag') {
+          E.scale = 0.006 + Math.random()*0.006; E.amp = 1.2 + Math.random()*1.2;
+        }
+        effects.push(E);
       }
 
       // Physics helpers
@@ -253,12 +397,12 @@ DOC = r"""<!doctype html>
         const qt = new Quadtree(0, 0, innerWidth, innerHeight, CFG.qtCap);
         for (let i=0;i<N;i++) qt.insert(i, px[i], py[i]);
 
-        // Apply flocking via neighbor queries
-        const vision = CFG.vision; const sep = CFG.sep;
-        for (let i=0;i<N;i++) { ax[i]=0; ay[i]=0; }
-        let tmp = [];
-        for (let i=0;i<N;i++) {
-          tmp.length = 0; qt.query(px[i], py[i], vision, tmp);
+      // Apply flocking via neighbor queries
+      const vision = CFG.vision; const sep = CFG.sep;
+      for (let i=0;i<N;i++) { ax[i]=0; ay[i]=0; }
+      let tmp = [];
+      for (let i=0;i<N;i++) {
+        tmp.length = 0; qt.query(px[i], py[i], vision, tmp);
           let cx=0, cy=0, vxsum=0, vysum=0, sx=0, sy=0, total=0, sclose=0;
           for (let k=0;k<tmp.length;k++) {
             const j = tmp[k]; if (j===i) continue;
@@ -279,31 +423,92 @@ DOC = r"""<!doctype html>
           if (sclose>0) {
             let sxv = sx; let syv = sy; [sxv, syv] = limit(sxv, syv, CFG.maxForce*1.5);
             ax[i] += sxv * CFG.separationW; ay[i] += syv * CFG.separationW;
-          }
         }
+        // optional flow field for pattern variety
+        if (CFG.flow) {
+          const s = CFG.flowScale || 0.004; const a = CFG.flowAmp || 0.6; const sp = CFG.flowSpeed || 0.6;
+          const t0 = performance.now()*0.001*sp;
+          const fx = Math.sin(py[i]*s + t0) * a;
+          const fy = Math.cos(px[i]*s - t0) * a;
+          ax[i] += fx; ay[i] += fy;
+        }
+      }
 
-        // Interaction shocks: push/pull and draw rings
-        ctx.save();
-        ctx.globalCompositeOperation = 'lighter';
-        for (let e=effects.length-1; e>=0; e--) {
-          const E = effects[e]; E.t += dt; const k = E.t / E.life;
-          const r = 30 + k * 260; const str = 1.0 - k; // strength fade
-          // push/pull
-          let tmp2 = []; qt.query(E.x, E.y, r, tmp2);
-          for (let ii=0; ii<tmp2.length; ii++) {
-            const i = tmp2[ii]; const dx = px[i]-E.x; const dy = py[i]-E.y; const d = Math.hypot(dx, dy)||1;
-            const f = (E.sign > 0 ? +1 : -1) * (1.8 * (1 - Math.min(1, d/r)));
-            ax[i] += (dx/d) * f; ay[i] += (dy/d) * f;
-            hue[i] = (hue[i] + 120 * (1 - Math.min(1, d/r))) % 360; // color burst
+      // Interaction effects: ~20+ modes including perlinDrag, lissaPulse, meteor
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      for (let e=effects.length-1; e>=0; e--) {
+        const E = effects[e]; E.t += dt; const k = E.t / E.life;
+        const r = 30 + k * 260; const str = 1.0 - k;
+        if (E.type === 'meteor') { E.x += (E.vx||0)*dt; E.y += (E.vy||0)*dt; E.vx *= (E.drag||1); E.vy *= (E.drag||1); E.mass *= 0.985; }
+        let tmp2 = []; qt.query(E.x, E.y, r, tmp2);
+        for (let ii=0; ii<tmp2.length; ii++) {
+          const i = tmp2[ii]; const dx = px[i]-E.x; const dy = py[i]-E.y; const d = Math.hypot(dx, dy)||1;
+          const fall = (1 - Math.min(1, d/r));
+          if (E.type === 'perlinDrag') {
+            const v = perlinVec(px[i]-E.x, py[i]-E.y, E.scale||0.008, (E.amp||1.5) * fall);
+            ax[i] += v[0]; ay[i] += v[1]; hueOff[i] += 40*fall; continue;
           }
-          // ring visual
-          const g = ctx.createRadialGradient(E.x, E.y, Math.max(1, r*0.6), E.x, E.y, r);
-          g.addColorStop(0.0, `hsla(${BASE_HUE}, 95%, 65%, ${0.25*str})`);
-          g.addColorStop(0.6, `hsla(${(BASE_HUE+40)%360}, 95%, 55%, ${0.18*str})`);
-          g.addColorStop(0.9, `hsla(${(BASE_HUE+80)%360}, 95%, 60%, 0)`);
-          ctx.fillStyle = g; ctx.beginPath(); ctx.arc(E.x, E.y, r, 0, Math.PI*2); ctx.fill();
-          if (k >= 1) effects.splice(e, 1);
+          if (E.type === 'lissaPulse') {
+            const ang = Math.atan2(dy, dx);
+            const w = Math.sin(E.a*ang + E.phase) * Math.cos(E.b*ang - E.phase);
+            const s = w * 2.0 * fall; ax[i] += (dx/d)*s; ay[i] += (dy/d)*s; sizeMul[i] += 0.2*fall; continue;
+          }
+          if (E.type === 'meteor') {
+            const G = 800; const f = Math.min(3.0, (G*(E.mass||200))/((d*d)+200));
+            ax[i] -= (dx/d)*f*fall; ay[i] -= (dy/d)*f*fall; vBoost[i] += 0.2*fall; sizeMul[i] += 0.15*fall; continue;
+          }
+          if (E.type === 'vortex' || E.type==='orbitCW' || E.type==='orbitCCW' || E.type==='spiralOut' || E.type==='spiralIn') {
+            const dir = (E.type==='orbitCCW') ? -1 : 1;
+            const tx = -dy/d, ty = dx/d; let s = (E.sign>0?1:-1) * 1.2 * fall * dir;
+            if (E.type==='spiralOut') { s = 1.2*fall; ax[i] += (dx/d)*fall*0.8; ay[i] += (dy/d)*fall*0.8; }
+            if (E.type==='spiralIn') { s = -1.2*fall; ax[i] -= (dx/d)*fall*0.6; ay[i] -= (dy/d)*fall*0.6; }
+            ax[i] += tx*s; ay[i] += ty*s; sizeMul[i] += 0.2*fall; vBoost[i] += 0.2*fall;
+          } else if (E.type === 'implosion' || E.type==='attract' || E.type==='magnet') {
+            const s = (E.type==='implosion' ? -2.2 : -1.2) * fall; ax[i] += (dx/d)*s; ay[i] += (dy/d)*s;
+            sizeMul[i] += 0.15*fall; vBoost[i] += 0.1*fall;
+          } else if (E.type === 'spray' || E.type==='scatter') {
+            const s = (E.sign>0?1:-1) * (E.type==='scatter'?3.0:2.4) * fall; ax[i] += (dx/d)*s; ay[i] += (dy/d)*s;
+            vx[i] += (dx/d) * 0.25 * fall; vy[i] += (dy/d) * 0.25 * fall; jitAmp[i] += 0.15*fall;
+          } else if (E.type === 'stun' || E.type==='freeze') {
+            vBoost[i] -= (E.type==='freeze'?0.6:0.3) * fall; sizeMul[i] += 0.3*fall; vx[i] *= 0.96; vy[i] *= 0.96;
+          } else if (E.type === 'fear') {
+            const s = 2.8 * fall; ax[i] += (dx/d)*s; ay[i] += (dy/d)*s; jitAmp[i] += 0.25*fall; hueOff[i] += 80*fall;
+          } else if (E.type === 'scramble') {
+            vx[i] += (Math.random()*2-1) * 1.5*fall; vy[i] += (Math.random()*2-1) * 1.5*fall; jitAmp[i] += 0.3*fall;
+          } else if (E.type === 'pulse' || E.type==='ripple') {
+            const w = Math.sin(k*Math.PI*2); const s = w * 2.0 * fall; ax[i] += (dx/d)*s; ay[i] += (dy/d)*s;
+          } else if (E.type === 'warp' || E.type==='speedup') {
+            vBoost[i] += 0.6*fall; sizeMul[i] += 0.2*fall; hueOff[i] += 40*fall;
+          } else if (E.type === 'slowdown') {
+            vBoost[i] -= 0.5*fall; hueOff[i] -= 20*fall;
+          } else if (E.type === 'grow') {
+            sizeMul[i] += 0.6*fall; hueOff[i] += 30*fall;
+          } else if (E.type === 'tunnel') {
+            const target = r*0.7; const s = (d<target?+1:-1) * 1.2 * fall; ax[i] += (dx/d)*s; ay[i] += (dy/d)*s;
+          } else if (E.type === 'jitterburst') {
+            jitAmp[i] += 0.6*fall; sizeMul[i] += 0.1*fall;
+          } else if (E.type === 'chromaburst') {
+            hueOff[i] += 160 * fall;
+          } else { // shock / default
+            const s = (E.sign>0?+1:-1) * 1.8 * fall; ax[i] += (dx/d)*s; ay[i] += (dy/d)*s; vBoost[i] += 0.1*fall;
+          }
+          // general color energy
+          hue[i] = (hue[i] + 90 * fall) % 360;
         }
+        const g = ctx.createRadialGradient(E.x, E.y, Math.max(1, r*0.6), E.x, E.y, r);
+        if (E.type === 'meteor') {
+          g.addColorStop(0.0, `hsla(${(paletteHue+20)%360}, 95%, 70%, ${0.34*str})`);
+          g.addColorStop(0.6, `hsla(${(paletteHue+60)%360}, 95%, 60%, ${0.22*str})`);
+          g.addColorStop(0.95, `hsla(${(paletteHue+100)%360}, 95%, 55%, 0)`);
+        } else {
+          g.addColorStop(0.0, `hsla(${paletteHue}, 95%, 65%, ${0.25*str})`);
+          g.addColorStop(0.6, `hsla(${(paletteHue+40)%360}, 95%, 55%, ${0.18*str})`);
+          g.addColorStop(0.9, `hsla(${(paletteHue+80)%360}, 95%, 60%, 0)`);
+        }
+        ctx.fillStyle = g; ctx.beginPath(); ctx.arc(E.x, E.y, r, 0, Math.PI*2); ctx.fill();
+        if (k >= 1) effects.splice(e, 1);
+      }
         ctx.restore();
 
         // Integrate and draw boids with glow and trails
@@ -312,8 +517,12 @@ DOC = r"""<!doctype html>
       ctx.lineWidth = CFG.lineWidth;
         for (let i=0;i<N;i++) {
           // integrate
+          if (jitAmp[i] > 0.0001) { ax[i] += (Math.random()*2-1) * 0.2 * jitAmp[i]; ay[i] += (Math.random()*2-1) * 0.2 * jitAmp[i]; }
           vx[i] += ax[i]; vy[i] += ay[i];
-          [vx[i], vy[i]] = limit(vx[i], vy[i], CFG.maxSpeed);
+          const vMax = CFG.maxSpeed * (1 + Math.max(-0.7, vBoost[i])*0.8);
+          [vx[i], vy[i]] = limit(vx[i], vy[i], vMax);
+          // enforce min speed (with boost)
+          { const sp = Math.hypot(vx[i], vy[i]) || 1; const vMin = CFG.minSpeed * (1 + Math.max(0, vBoost[i])*0.5); if (sp < vMin) { const s = vMin / sp; vx[i] *= s; vy[i] *= s; } }
           prevx[i] = px[i]; prevy[i] = py[i];
           px[i] += vx[i]; py[i] += vy[i];
 
@@ -328,12 +537,14 @@ DOC = r"""<!doctype html>
             py[i] = Math.max(0, Math.min(innerHeight, py[i]));
           }
 
-          // speed-based tint
+          // decay modifiers and compute tint
+          vBoost[i] *= 0.92; sizeMul[i] *= 0.90; hueOff[i] *= 0.94; jitAmp[i] *= 0.88;
           spd[i] = Math.hypot(vx[i], vy[i]);
           const L = 50 + Math.min(45, spd[i]*8);
           const S = 80 + Math.min(20, spd[i]*6);
-          ctx.strokeStyle = `hsl(${hue[i]}, ${S}%, ${L}%)`;
-          ctx.shadowColor = `hsl(${hue[i]}, 90%, 60%)`;
+          const drawHue = (hue[i] + hueOff[i]) % 360;
+          ctx.strokeStyle = `hsl(${drawHue}, ${S}%, ${L}%)`;
+          ctx.shadowColor = `hsl(${drawHue}, 90%, 60%)`;
           ctx.shadowBlur = CFG.glowBase + Math.min(CFG.glowMax, spd[i]*CFG.glowScale);
 
           // trail segment
@@ -346,7 +557,7 @@ DOC = r"""<!doctype html>
           const ang = Math.atan2(vy[i], vx[i]);
           ctx.fillStyle = `hsl(${hue[i]}, 95%, ${L}%)`;
           ctx.beginPath();
-          const s = CFG.cometSize;
+          const s = CFG.cometSize * (1 + (sizeMul[i]||0));
           if (CFG.shape === 'triangle') {
             ctx.moveTo(px[i] + Math.cos(ang)*s*1.6, py[i] + Math.sin(ang)*s*1.6);
             ctx.lineTo(px[i] + Math.cos(ang+2.6)*s,  py[i] + Math.sin(ang+2.6)*s);
@@ -363,22 +574,131 @@ DOC = r"""<!doctype html>
         ctx.restore();
 
         // Quadtree visualization (default on)
-        if (SHOW_QT) qt.draw(ctx);
+        if (CFG.qt) qt.draw(ctx);
 
         // HUD
         hudEl.innerHTML = `<strong>Boids</strong> · N=${N} vision=${CFG.vision} sep=${CFG.sep} ` +
-          `· qtCap=${CFG.qtCap} · hue=${BASE_HUE} · qtViz=${SHOW_QT?'on':'off'}`;
+          `· qtCap=${CFG.qtCap} · hue=${paletteHue} · qtViz=${CFG.qt?'on':'off'} · click=${CFG.clickMode}`;
 
         requestAnimationFrame(frame);
       }
       requestAnimationFrame(frame);
 
-      // keyboard: toggle quadtree viz
-      addEventListener('keydown', (e) => {
-        if (e.key.toLowerCase() === 'q') {
-          const url = new URL(location.href); url.searchParams.set('qt', SHOW_QT ? '0' : '1'); location.href = url.toString();
+      // Config UI build and wiring
+      const cfgBtn = document.getElementById('cfgBtn');
+      const cfgClose = document.getElementById('cfgClose');
+      const cfgPanel = document.getElementById('config');
+      const cfgBody = document.getElementById('configBody');
+      cfgBtn.addEventListener('click', () => cfgPanel.removeAttribute('hidden'));
+      cfgClose.addEventListener('click', () => cfgPanel.setAttribute('hidden',''));
+
+      const schema = [
+        {key:'hue', label:'Hue', type:'int', min:0, max:360, step:1, value:BASE_HUE},
+        {key:'header', label:'Header', type:'text', value:HEADER},
+        {key:'subheader', label:'Subheader', type:'text', value:SUBHEADER},
+        {key:'qt', label:'Show Quadtree', type:'bool'},
+        {key:'showHud', label:'Show HUD', type:'bool'},
+        {key:'spawn', label:'Spawn', type:'select', options:['random','circle','grid','centerburst']},
+        {key:'count', label:'Count', type:'int', min:50, max:1000, step:1},
+        {key:'vision', label:'Vision', type:'int', min:20, max:200, step:1},
+        {key:'sep', label:'Separation Dist', type:'int', min:4, max:80, step:1},
+        {key:'maxSpeed', label:'Max Speed', type:'number', min:0.1, max:12, step:0.1},
+        {key:'minSpeed', label:'Min Speed', type:'number', min:0.0, max:6, step:0.1},
+        {key:'maxForce', label:'Max Steering Force', type:'number', min:0.001, max:0.5, step:0.001},
+        {key:'alignW', label:'Align Weight', type:'number', min:0, max:4, step:0.01},
+        {key:'cohesionW', label:'Cohesion Weight', type:'number', min:0, max:4, step:0.01},
+        {key:'separationW', label:'Separation Weight', type:'number', min:0, max:4, step:0.01},
+        {key:'trailAlpha', label:'Trail Alpha', type:'number', min:0, max:1, step:0.01},
+        {key:'qtCap', label:'Quadtree Capacity', type:'int', min:2, max:32, step:1},
+        {key:'wrap', label:'Wrap Bounds', type:'bool'},
+        {key:'shape', label:'Shape', type:'select', options:['triangle','spark','orb']},
+        {key:'blend', label:'Blend', type:'select', options:['lighter','screen','overlay','plus-lighter']},
+        {key:'lineWidth', label:'Line Width', type:'number', min:0.2, max:4, step:0.1},
+        {key:'glowBase', label:'Glow Base', type:'number', min:0, max:60, step:1},
+        {key:'glowMax', label:'Glow Max', type:'number', min:0, max:80, step:1},
+        {key:'glowScale', label:'Glow Scale', type:'number', min:0, max:40, step:0.1},
+        {key:'cometSize', label:'Comet Size', type:'number', min:1, max:20, step:0.1},
+        {key:'bgGradient', label:'BG Gradient', type:'bool'},
+        {key:'bgHueShift1', label:'BG Hue Shift 1', type:'int', min:-180, max:180, step:1},
+        {key:'bgHueShift2', label:'BG Hue Shift 2', type:'int', min:-180, max:180, step:1},
+        {key:'bgHueShift3', label:'BG Hue Shift 3', type:'int', min:-180, max:180, step:1},
+        {key:'flow', label:'Flow Field', type:'bool'},
+        {key:'flowAmp', label:'Flow Amp', type:'number', min:0, max:4, step:0.05},
+        {key:'flowScale', label:'Flow Scale', type:'number', min:0.0005, max:0.02, step:0.0005},
+        {key:'flowSpeed', label:'Flow Speed', type:'number', min:0, max:3, step:0.01},
+        {key:'clickMode', label:'Click Mode', type:'select', options:['random','shock','vortex','implosion','spray']},
+      ];
+
+      function makeRow(label, input) {
+        const row = document.createElement('div'); row.className = 'row';
+        const l = document.createElement('label'); l.textContent = label; row.appendChild(l);
+        row.appendChild(input); return row;
+      }
+
+      function addInput(item) {
+        let input;
+        const v0 = (item.key in CFG) ? CFG[item.key] : item.value;
+        if (item.type === 'bool') {
+          input = document.createElement('input'); input.type='checkbox'; input.checked = Boolean(v0);
+          input.addEventListener('input', () => { CFG[item.key] = input.checked; applyChange(item.key, CFG[item.key]); });
+        } else if (item.type === 'select') {
+          input = document.createElement('select');
+          for (const opt of item.options) { const o = document.createElement('option'); o.value=opt; o.textContent=opt; if (opt===v0) o.selected=true; input.appendChild(o); }
+          input.addEventListener('input', () => { CFG[item.key] = input.value; applyChange(item.key, CFG[item.key]); });
+        } else if (item.type === 'text') {
+          input = document.createElement('input'); input.type='text'; input.value = String(v0||'');
+          input.addEventListener('input', () => { if (item.key==='header') { titleEl.textContent = input.value; }
+                                                 if (item.key==='subheader') { subtitleEl.textContent = input.value; }
+                                                 applyChange(item.key, input.value); });
+        } else if (item.key === 'hue') {
+          input = document.createElement('input'); input.type='range'; input.min='0'; input.max='360'; input.step='1'; input.value=String(v0);
+          const number = document.createElement('input'); number.type='number'; number.min='0'; number.max='360'; number.step='1'; number.value=String(v0);
+          input.addEventListener('input', () => { number.value=input.value; hueChanged(parseInt(input.value)); });
+          number.addEventListener('input', () => { input.value=number.value; hueChanged(parseInt(number.value)); });
+          const wrap = document.createElement('div'); wrap.className='rangeRow'; wrap.appendChild(input); wrap.appendChild(number);
+          cfgBody.appendChild(makeRow(item.label, wrap));
+          return;
+          function hueChanged(val){
+            // shift palette immediately
+            const delta = (val - paletteHue);
+            paletteHue = val;
+            for (let i=0;i<N;i++) { hue[i] = (hue[i] + delta) % 360; }
+            document.documentElement.style.setProperty('--accent', `hsl(${val}, 85%, 62%)`);
+            updateUrlFromCfg({hue:String(val)});
+          }
+        } else { // numeric (range + number pair)
+          input = document.createElement('input'); input.type='range'; input.step=String(item.step||1);
+          if (item.min!=null) input.min=String(item.min); if (item.max!=null) input.max=String(item.max);
+          const number = document.createElement('input'); number.type='number'; number.step=String(item.step||1);
+          if (item.min!=null) number.min=String(item.min); if (item.max!=null) number.max=String(item.max);
+          input.value = String(v0); number.value = String(v0);
+          input.addEventListener('input', () => { number.value = input.value; numChanged(parseFloat(input.value)); });
+          number.addEventListener('input', () => { input.value = number.value; numChanged(parseFloat(number.value)); });
+          const wrap = document.createElement('div'); wrap.className='rangeRow'; wrap.appendChild(input); wrap.appendChild(number);
+          cfgBody.appendChild(makeRow(item.label, wrap));
+          return;
+          function numChanged(val){ CFG[item.key] = val; applyChange(item.key, val); }
         }
-      });
+        cfgBody.appendChild(makeRow(item.label, input));
+      }
+
+      function applyChange(key, value) {
+        if (key === 'count' || key === 'spawn') { reseed(CFG.count); }
+        if (key === 'qt') { /* immediate draw toggle via CFG */ }
+        if (key === 'showHud') { hudEl.style.display = CFG.showHud ? '' : 'none'; }
+        updateUrlFromCfg();
+      }
+
+      for (const item of schema) addInput(item);
+      // initial HUD visibility
+      hudEl.style.display = (CFG.showHud===false) ? 'none' : '';
+
+      // keyboard toggles (after building panel)
+      addEventListener('keydown', (e) => {
+        const k = e.key.toLowerCase();
+        if (k === 'q') { CFG.qt = !CFG.qt; updateUrlFromCfg(); }
+        if (k === 'c') { cfgPanel.toggleAttribute('hidden'); }
+      }, {passive:true});
     </script>
   </body>
 </html>
@@ -387,6 +707,7 @@ DOC = r"""<!doctype html>
 
 import json
 import random
+import subprocess
 
 
 def rand_variant(seed: int):
@@ -397,6 +718,7 @@ def rand_variant(seed: int):
     "sep": rnd.randint(12, 28),
     "maxSpeed": round(rnd.uniform(2.4, 4.2), 2),
     "maxForce": round(rnd.uniform(0.04, 0.09), 3),
+    "minSpeed": round(rnd.uniform(0.6, 1.4), 2),
     "alignW": round(rnd.uniform(0.7, 1.4), 2),
     "cohesionW": round(rnd.uniform(0.5, 1.2), 2),
     "separationW": round(rnd.uniform(1.4, 2.8), 2),
@@ -414,6 +736,14 @@ def rand_variant(seed: int):
     "bgHueShift1": rnd.randint(-40, 40),
     "bgHueShift2": rnd.randint(20, 80),
     "bgHueShift3": rnd.randint(80, 140),
+    "spawn": rnd.choice(["random","circle","grid","centerburst"]),
+    "qt": True,
+    "showHud": True,
+    "flow": rnd.choice([True, False, False]),
+    "flowAmp": round(rnd.uniform(0.3, 1.2), 2),
+    "flowScale": round(rnd.uniform(0.001, 0.01), 4),
+    "flowSpeed": round(rnd.uniform(0.3, 1.5), 2),
+    "clickMode": "random",
   }
 
 
@@ -422,6 +752,16 @@ def make_doc(cfg: dict, default_hue: int) -> str:
   doc = textwrap.dedent(DOC)
   doc = doc.replace("__CFG__", cfg_json)
   doc = doc.replace("__DEFAULT_HUE__", str(default_hue))
+  # Build a descriptive title for this specific variant
+  wrap = 'wrap' if cfg.get('wrap') else 'bounce'
+  flow = ' · flow' if cfg.get('flow') else ''
+  spawn = cfg.get('spawn') or 'random'
+  shape = cfg.get('shape') or 'triangle'
+  blend = cfg.get('blend') or 'lighter'
+  count = cfg.get('count') or 0
+  qtcap = cfg.get('qtCap') or 0
+  title = f"Boids DOD+QT · N={count} · spawn={spawn} · {wrap} · {shape} · {blend} · hue={default_hue} · qtCap={qtcap}{flow}"
+  doc = doc.replace("__TITLE__", title)
   return doc
 
 
@@ -440,6 +780,7 @@ def main():
   ap = argparse.ArgumentParser(description='Generate single-file boids simulations (HTML)')
   ap.add_argument('--out-dir', type=str, default=None, help='output directory (defaults to runs/boids-<timestamp>_singlefile)')
   ap.add_argument('--count', type=int, default=1, help='number of simulations to generate')
+  ap.add_argument('--index', action='store_true', help='build a link viewer (index.html) for the output folder')
   args = ap.parse_args()
 
   folder = out_dir_path(args.out_dir)
@@ -452,6 +793,12 @@ def main():
     print(' -', p)
   print('\nOpen in your browser and try:')
   print('  ?hue=210&header=Hello&subheader=Quadtree+viz+%2B+shockwaves')
+  if args.index:
+    try:
+      subprocess.run(['python3', 'build-link-viewer.sh', folder], check=True)
+      print(f"\nBuilt index.html for {folder}")
+    except Exception as e:
+      print('Failed to build link viewer:', e)
 
 
 if __name__ == '__main__':

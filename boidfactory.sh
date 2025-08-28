@@ -78,18 +78,18 @@ General:
   --twist                    Use the creative rule "twist" prompt preset
 
 Models:
-  --code-model NAME          Model for implementation (default: $CODE_MODEL)
+  --code-model NAME          Model for implementation (default: ${CODE_MODEL})
   --code-model-select        Pick code model via fzf
-  --spec-model NAME          Model for spec (default: $SPEC_MODEL)
+  --spec-model NAME          Model for spec (default: ${SPEC_MODEL})
   --spec-model-select        Pick spec model via fzf
   --model NAME               Use same model for spec and code
   --model-select             Pick a single model for both via fzf
   --model-random             Random non-embed, non-rerank model for both
 
 Execution:
-  --times N                  Number of runs (default: $TIMES)
-  --parallel N               Parallel jobs (default: $PARALLEL_JOBS)
-  --think[=true|false]       Pass thinking flag to Ollama (default: $THINKING_ARG)
+  --times N                  Number of runs (default: ${TIMES})
+  --parallel N               Parallel jobs (default: ${PARALLEL_JOBS})
+  --think[=true|false]       Pass thinking flag to Ollama (default: ${THINKING_ARG})
   --hidethinking             Hide model chain-of-thought output
 
 Output:
@@ -105,6 +105,7 @@ Examples:
   $0 --prompt-file myprompt.txt --code-model qwen3-coder:latest --spec-model gpt-oss:120b
   $0 --model-select --times 4 --parallel 2 --think=true
 EOF
+
 }
 
 

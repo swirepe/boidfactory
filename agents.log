@@ -5,3 +5,7 @@
 2025-08-28T00:12:00Z can you make another one just like agents/boids-multifile-generator.py but it makes them as single files instead?
 2025-08-28T00:15:00Z extend ./boids-singlefile-generator.py to take a --count argument to make multiple simulations
 2025-08-28T00:18:00Z I want a lot more variation in the simulations made by ./boids-singlefile-generator.py
+2025-08-28T00:25:00Z add more variation in click effect; add hidden config overlay with all configuration, include min speed, max force, and hue selector; make all configuration URL-overridable; update URL on change.
+2025-08-28T00:33:00Z add a lot more variation, slick animations and patterns; ensure config changes apply immediately; polish config overlay; mobile friendly.
+2025-08-28T00:40:00Z add perlin-routed drags, lissajous pulses tied to pointer velocity, and meteor strike gravity wells; add --index flag to boids-singlefile-generator.py to build viewer.
+2025-08-28T00:45:00Z update singlefile generator <title> to descriptive per-variant title.
