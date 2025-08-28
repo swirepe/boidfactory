@@ -127,7 +127,7 @@
         #code-pane.dock-bottom.visible { transform: translateY(0); height: 40vh; }
         /* Left dock */
         #code-pane.dock-left { top: 0; left: 0; height: 100vh; width: 40vw; min-width: 320px; border-right: 2px solid var(--border-color); }
-        #code-pane.dock-left:not(.visible) { transform: translateX(calc(-100% + 48px)); }
+        #code-pane.dock-left:not(.visible) { transform: translateX(-100%); }
         #code-pane.dock-left.visible { transform: translateX(0); }
         /* Maximized */
         #code-pane.maximized { top: 0; left: 0; width: 100vw; height: 100vh; border-top: 2px solid var(--border-color); transform: none !important; }
@@ -739,7 +739,9 @@ return mouseForce;`
             document.documentElement.style.setProperty('--hue', config.hue);
             document.querySelectorAll('.overlay-toggle').forEach(button => {
                 button.addEventListener('click', () => {
-                    const targetOverlay = document.getElementById(button.dataset.overlay);
+                    const id = button.dataset.overlay;
+                    const targetOverlay = id ? document.getElementById(id) : null;
+                    if (!targetOverlay) return;
                     const isVisible = targetOverlay.classList.contains('visible');
                     document.querySelectorAll('.overlay').forEach(o => o.classList.remove('visible'));
                     if (!isVisible) targetOverlay.classList.add('visible');
@@ -757,6 +759,7 @@ return mouseForce;`
                 // Ignore clicks on dock control buttons inside the header
                 if (e.target && e.target.classList.contains('dock-btn')) return;
                 codePane.classList.toggle('visible');
+                updateCodeOverlayButton();
                 refreshEditors();
             });
             // Dock controls
@@ -768,6 +771,7 @@ return mouseForce;`
                     if (config.debug) updateAllURLParams(); else updateURL('codePaneDock', config.codePaneDock);
                 });
             });
+            updateCodeOverlayButton();
             setupConfigUI();
             setupStatsUI();
             setupHelpUI();
@@ -780,18 +784,50 @@ return mouseForce;`
             if (mode === 'left') {
                 pane.classList.add('dock-left');
                 document.querySelector('.dock-btn[data-dock="left"]').classList.add('active');
+                if (config.codePaneLeftWidth && Number.isFinite(+config.codePaneLeftWidth)) {
+                    pane.style.width = parseInt(config.codePaneLeftWidth, 10) + 'px';
+                } else {
+                    pane.style.width = '';
+                }
+                document.body.classList.remove('code-pane-maximized');
             } else if (mode === 'max' || mode === 'maximized') {
                 pane.classList.add('maximized', 'visible');
                 document.querySelector('.dock-btn[data-dock="max"]').classList.add('active');
+                document.body.classList.add('code-pane-maximized');
             } else {
                 pane.classList.add('dock-bottom');
                 document.querySelector('.dock-btn[data-dock="bottom"]').classList.add('active');
+                document.body.classList.remove('code-pane-maximized');
             }
-            // Ensure visibility state is meaningful in each mode
-            if (mode !== 'max' && !pane.classList.contains('visible')) {
-                // keep collapsed state for bottom/left unless already visible
-            }
+            updateCodeOverlayButton();
+            // Keep collapsed state meaningful for bottom/left
             refreshEditors();
+        }
+
+        function updateCodeOverlayButton() {
+            const container = document.querySelector('.overlay-toggle-container');
+            const pane = document.getElementById('code-pane');
+            if (!container || !pane) return;
+            const existing = document.getElementById('overlay-code-button');
+            const isMax = document.body.classList.contains('code-pane-maximized');
+            const needs = pane.classList.contains('dock-left') && !pane.classList.contains('visible') && !isMax;
+            if (needs) {
+                if (!existing) {
+                    const btn = document.createElement('button');
+                    btn.id = 'overlay-code-button';
+                    btn.className = 'overlay-toggle';
+                    btn.textContent = 'Code';
+                    btn.title = 'Show code pane';
+                    btn.addEventListener('click', () => {
+                        pane.classList.add('visible');
+                        updateCodeOverlayButton();
+                        refreshEditors();
+                    });
+                    container.prepend(btn);
+                }
+            } else if (existing) {
+                existing.remove();
+            }
         }
 
         function refreshEditors() {
