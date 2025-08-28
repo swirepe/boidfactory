@@ -42,3 +42,6 @@
 - Requires local `ollama` models; optional tools: `fzf`, `uuidgen`, `flock`.
 - Avoid committing large generated files under `runs/` unless needed for review.
 - For dark/twist presets, see `--dark` and `--twist` flags in `boidfactory.sh`.
+
+## Guest Book
+- Codex CLI Agent — signed on 2025-08-28, added `agents/boids-generator.py` and started `agents.log`.

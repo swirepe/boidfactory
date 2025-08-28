@@ -6,6 +6,8 @@ import urllib.parse
 import re
 import argparse
 import base64
+import io
+import zipfile
 from pathlib import Path
 
 def setup_arg_parser():
@@ -128,8 +130,31 @@ def main():
     folder_links.sort()
     file_links.sort()
 
-    all_link_items = [item[1] for item in folder_links] + [item[1] for item in file_links]
-    links_html = "\n".join(all_link_items)
+    # Build a ZIP of all linked files and embed as a data URI for bulk download
+    download_all_html = ""
+    try:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, 'w', compression=zipfile.ZIP_DEFLATED) as z:
+            for f in files_to_link:
+                try:
+                    arcname = f.relative_to(root_dir).as_posix()
+                    z.writestr(arcname, f.read_bytes())
+                except (IOError, OSError) as e:
+                    print(f"Warning: Skipping {f} from ZIP: {e}", file=sys.stderr)
+        zip_b64 = base64.b64encode(buf.getvalue()).decode('ascii')
+        zip_data_uri = f"data:application/zip;base64,{zip_b64}"
+        zip_name = f"{root_dir.name or 'folder'}.zip"
+        download_all_html = (
+            f'      <li class="download-all">'
+            f'<a href="{zip_data_uri}" download="{html.escape(zip_name)}" '
+            f'class="download-btn" title="Download entire folder as ZIP">'
+            f'📦 <strong>Download All</strong></a></li>'
+        )
+    except Exception as e:
+        print(f"Warning: Could not build ZIP: {e}", file=sys.stderr)
+
+    all_link_items = [download_all_html] + [item[1] for item in folder_links] + [item[1] for item in file_links]
+    links_html = "\n".join([s for s in all_link_items if s])
     
     try:
         template_content = args.template.read_text(encoding="utf-8")

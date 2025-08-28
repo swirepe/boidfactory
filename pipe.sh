@@ -168,6 +168,38 @@ function select_model() {
         --header="NAME           SIZE    MODIFIED" | awk '{print $1}')
 }
 
+show_help() {
+cat << EOF
+Usage: $0 [OPTIONS]
+
+Generates single-file Boids HTML by chaining Ollama prompts, with optional refinements and parallel runs.
+
+Options:
+  --model NAME               Ollama model (default: gpt-oss:20b)
+  --model-select             Select a model via fzf
+  --dark | --twist | --juice Use preset prompt variants
+  --add-twist N              Prepend N twist refinements
+  --add-invention N          Prepend N invention refinements
+  --add-juice N              Prepend N visual-juice refinements
+  --prompt TEXT              Append TEXT to the prompt
+  --prompt-file FILE         Use FILE contents as the prompt
+  --prompt-edit              Open an editor to edit the prompt
+  --spec                     Add spec → implementation refinement steps
+  --think | --think=true     Enable thinking mode for Ollama
+  --times N                  Number of outputs to generate (default: 10)
+  --parallel N               Parallel jobs (default: 5)
+  --fix                      Post-process with jshint and auto-fix via model
+  --out, --output DIR        Output directory (default: runs/boids_YYYYMMDD_HHMMSS)
+  -v, --verbose              Verbose logs to stderr
+  -h, --help                 Show this help and exit
+
+Examples:
+  $0 --model qwen3-coder:latest --dark --times 4 --parallel 2
+  $0 --prompt-file prompt.txt --add-twist 2 --spec --think
+  echo "Write boids" | $0 --model-select --out runs/demo --times 3
+EOF
+}
+
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --model)
