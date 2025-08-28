@@ -129,7 +129,9 @@ func Generate(seedStr, header, subheader string) (string, error) {
     cfg := defaultConfig(r)
     hue := int(r.IntN(360))
     title := fmt.Sprintf("Boids (Go) · N=%d · hue=%d", cfg.Count, hue)
-    if header == "" { header = "Boids — Go generator" }
+    // Suppress header/subheader by default when not explicitly provided
+    if strings.TrimSpace(header) == "" { cfg.ShowHeader = false }
+    if strings.TrimSpace(subheader) == "" { cfg.ShowSubheader = false }
     // If subheader empty, leave it empty by default. Only show when explicitly set via URL or caller.
     data := map[string]any{
         "Title":       title,

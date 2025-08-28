@@ -52,3 +52,4 @@
 - Codex CLI Agent — signed on 2025-08-28, added flow field visualization overlay (Go generator template + config).
 - Codex CLI Agent — signed on 2025-08-28, added header/subheader visibility toggles, overlay toggle behavior, and advanced flow field configuration (modes, variation, anisotropy, octaves).
  - Codex CLI Agent — signed on 2025-08-28, added live count resizing, vision radius viz (one/all), click/drag behavior variety, flow-driven color + glow, default quadtree/flow viz, and edge safety for non-wrap.
+ - Codex CLI Agent — signed on 2025-08-28, hide header/subheader by default in CLI -count mode (Go generator).

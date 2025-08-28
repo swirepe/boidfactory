@@ -58,3 +58,4 @@ Update the AGENTS.md, add a README.md please
 ==== 2025-08-28T07:10:34Z Prompt Start ====
 In template.html, auto-select the first simulation on load instead of waiting for user selection.
 ==== Prompt End ====
+in the go generator -count mode, let's not have a header or subheader unless explicitly set
