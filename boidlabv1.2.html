@@ -93,6 +93,17 @@
         }
         /* Hide overlay buttons when code pane is maximized */
         body.code-pane-maximized .overlay-toggle-container { display: none; }
+        /* Subtle enter/leave transitions for temporary Code overlay button */
+        #overlay-code-button {
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 0.22s ease, transform 0.22s ease;
+        }
+        #overlay-code-button.entering,
+        #overlay-code-button.leaving {
+            opacity: 0;
+            transform: translateY(-6px);
+        }
         .overlay-toggle {
             background-color: var(--primary-color);
             color: white;
@@ -818,15 +829,34 @@ return mouseForce;`
                     btn.className = 'overlay-toggle';
                     btn.textContent = 'Code';
                     btn.title = 'Show code pane';
+                    // Start in entering state for fade/slide in
+                    btn.classList.add('entering');
                     btn.addEventListener('click', () => {
                         pane.classList.add('visible');
                         updateCodeOverlayButton();
                         refreshEditors();
                     });
                     container.prepend(btn);
+                    // Trigger transition on next frame
+                    requestAnimationFrame(() => requestAnimationFrame(() => btn.classList.remove('entering')));
                 }
             } else if (existing) {
-                existing.remove();
+                // If overlays are visible, animate out. If maximized (container hidden), remove immediately.
+                if (!document.body.classList.contains('code-pane-maximized')) {
+                    if (!existing.dataset.removing) {
+                        existing.dataset.removing = '1';
+                        existing.classList.add('leaving');
+                        const cleanup = () => {
+                            existing.removeEventListener('transitionend', cleanup);
+                            if (existing && existing.parentNode) existing.parentNode.removeChild(existing);
+                        };
+                        existing.addEventListener('transitionend', cleanup);
+                        // Fallback removal in case transitionend doesn't fire
+                        setTimeout(() => cleanup(), 300);
+                    }
+                } else {
+                    existing.remove();
+                }
             }
         }
 
