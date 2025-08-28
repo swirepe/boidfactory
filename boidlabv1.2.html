@@ -91,6 +91,8 @@
             gap: 10px;
             z-index: 1001;
         }
+        /* Hide overlay buttons when code pane is maximized */
+        body.code-pane-maximized .overlay-toggle-container { display: none; }
         .overlay-toggle {
             background-color: var(--primary-color);
             color: white;
@@ -139,30 +141,34 @@
             cursor: pointer;
             font-size: 16px;
             font-family: var(--font-mono);
-        }
-        /* Dock controls (positioned on the right of the header bar) */
-        .dock-controls {
-            position: absolute;
-            top: 6px;
-            right: 8px;
             display: flex;
-            gap: 6px;
+            align-items: center;
+            gap: 8px;
+            text-align: left;
         }
+        .code-icon { width: 18px; height: 18px; opacity: 0.9; }
+        .code-label { flex: 1; }
+        /* Dock controls */
+        .dock-controls { display: flex; gap: 6px; }
         .dock-btn {
-            background: rgba(0,0,0,0.25);
-            border: 1px solid rgba(255,255,255,0.15);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
+            background: transparent;
+            border: none;
+            color: rgba(255,255,255,0.8);
+            width: 32px;
+            height: 32px;
+            padding: 0;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
             cursor: pointer;
-            font-family: var(--font-mono);
-            font-size: 12px;
+            opacity: 0.7;
+            transition: opacity 0.15s ease, color 0.15s ease;
         }
-        .dock-btn.active { border-color: var(--primary-color); color: var(--primary-color); background: rgba(0,0,0,0.35); }
-        .code-tabs {
-            display: flex;
-            flex-shrink: 0;
-        }
+        .dock-btn:hover { opacity: 1; }
+        .dock-btn svg { width: 20px; height: 20px; display: block; }
+        .dock-btn.active { color: var(--primary-color); opacity: 1; }
+        .code-tabs { display: flex; align-items: center; gap: 6px; padding: 0 6px; flex-shrink: 0; }
+        .code-tabs .dock-controls { margin-left: auto; }
         .tab-button {
             flex-grow: 1;
             padding: 10px;
@@ -202,6 +208,10 @@
         #code-pane.dock-bottom.visible .CodeMirror { height: calc(40vh - 92px) !important; }
         #code-pane.dock-left .CodeMirror { height: calc(100vh - 92px) !important; }
         #code-pane.maximized .CodeMirror { height: calc(100vh - 92px) !important; }
+        /* Minimized left dock: show only icon in header */
+        #code-pane.dock-left:not(.visible) .code-label { display: none; }
+        #code-pane.dock-left:not(.visible) .code-tabs { display: none; }
+        #code-pane.dock-left:not(.visible) .code-pane-toggle { width: 48px; justify-content: center; }
         .config-item {
             margin-bottom: 12px;
         }
@@ -280,18 +290,45 @@
     <div class="overlay" id="help-overlay"></div>
 
     <div id="code-pane" class="dock-bottom">
-        <button class="code-pane-toggle">Code
-            <span class="dock-controls" aria-label="Code pane docking controls">
-                <button class="dock-btn" data-dock="bottom" title="Dock bottom">Bottom</button>
-                <button class="dock-btn" data-dock="left" title="Dock left">Left</button>
-                <button class="dock-btn" data-dock="max" title="Maximize">Max</button>
-            </span>
+        <button class="code-pane-toggle">
+            <!-- Minimalist editor icon (window with lines) -->
+            <svg class="code-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                <rect x="3" y="5" width="18" height="14" rx="2" ry="2" fill="none" stroke="currentColor" stroke-width="1.5"/>
+                <circle cx="6.5" cy="7.5" r="0.9" fill="currentColor"/>
+                <circle cx="9.5" cy="7.5" r="0.9" fill="currentColor"/>
+                <line x1="6" y1="11" x2="18" y2="11" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+                <line x1="6" y1="14" x2="15" y2="14" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+            </svg>
+            <span class="code-label">Code</span>
         </button>
         <div class="code-tabs">
             <button class="tab-button active" data-tab="cohesion">Cohesion</button>
             <button class="tab-button" data-tab="separation">Separation</button>
             <button class="tab-button" data-tab="alignment">Alignment</button>
             <button class="tab-button" data-tab="novel">Novel</button>
+            <span class="dock-controls" aria-label="Code pane docking controls">
+                <!-- Bottom dock icon: bottom band inside a window -->
+                <button class="dock-btn" data-dock="bottom" title="Dock bottom" aria-label="Dock bottom">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="4" y="5" width="16" height="14" rx="2"/>
+                        <rect x="5.5" y="16" width="13" height="2.5" fill="currentColor" stroke="none"/>
+                    </svg>
+                </button>
+                <!-- Left dock icon: left band inside a window -->
+                <button class="dock-btn" data-dock="left" title="Dock left" aria-label="Dock left">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="4" y="5" width="16" height="14" rx="2"/>
+                        <rect x="5.5" y="6.5" width="2.5" height="11" fill="currentColor" stroke="none"/>
+                    </svg>
+                </button>
+                <!-- Maximize icon: full window fill -->
+                <button class="dock-btn" data-dock="max" title="Maximize" aria-label="Maximize">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="4" y="5" width="16" height="14" rx="2"/>
+                        <rect x="5.5" y="6.5" width="13" height="11" fill="currentColor" stroke="none"/>
+                    </svg>
+                </button>
+            </span>
         </div>
         <div id="cohesion" class="tab-content active"><textarea></textarea></div>
         <div id="separation" class="tab-content"><textarea></textarea></div>
