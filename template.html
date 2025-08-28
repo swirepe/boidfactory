@@ -70,8 +70,10 @@
   .radio-group{width:100%; gap:8px; background:#0c1117; padding:4px; border-radius:8px; border:1px solid var(--border);}
   .radio-group label{display:flex; align-items:center; gap:5px; padding:3px 8px; border-radius:6px; cursor:pointer; transition: background .2s ease, color .2s ease;}
   .radio-group input{accent-color: var(--accent); width:14px; height:14px;}
-  .radio-group input:checked + span{color:var(--text);}
-  .radio-group label:has(input:checked){background: var(--border);}
+  .radio-group input:checked + span{color:var(--text);} 
+  .radio-group label:has(input:checked){background: var(--border);} 
+  .auto-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .auto-row input[type=number]{width:80px}
 
   /* Viewer */
   main{min-width:0; display:flex; flex-direction:column}
@@ -131,6 +133,11 @@
           <label><input type="radio" name="displayMode" value="both"><span>Both</span></label>
         </div>
       </div>
+      <div class="row auto-row">
+        <label class="switch"><input id="autoToggle" type="checkbox"><span>Auto</span></label>
+        <label>Interval (s): <input id="autoSec" type="number" min="2" max="120" step="1" value="8"></label>
+        <span class="pill" id="autoStatus">off</span>
+      </div>
     </div>
     <ul id="linkList">
 <!-- LINK_LIST_PLACEHOLDER -->
@@ -146,7 +153,7 @@
   </main>
 </div>
 <script>
-const CONTROL_KEYS = new Set(['hue','debug','header','subheader']);
+const CONTROL_KEYS = new Set(['hue','debug','header','subheader','auto','autoSec']);
 let currentSelectedPath = null;
 
 function getInitialState(){
@@ -155,7 +162,9 @@ function getInitialState(){
     hue: Number.isFinite(+sp.get('hue')) ? Math.max(0, Math.min(360, +sp.get('hue'))) : 220,
     debug: (sp.has('debug') ? /^(1|true|yes|on)$/i.test(sp.get('debug')) : true),
     header: sp.get('header') ?? '',
-    subheader: sp.get('subheader') ?? ''
+    subheader: sp.get('subheader') ?? '',
+    auto: (sp.has('auto') ? /^(1|true|yes|on)$/i.test(sp.get('auto')) : false),
+    autoSec: Number.isFinite(+sp.get('autoSec')) ? Math.max(2, Math.min(120, +sp.get('autoSec'))) : 8
   };
   return state;
 }
@@ -166,6 +175,8 @@ function buildParams(state, includeOtherParams=true){
   base.set('debug', state.debug ? 'true' : 'false');
   if (state.header && state.header.trim()) base.set('header', state.header.trim()); else base.delete('header');
   if (state.subheader && state.subheader.trim()) base.set('subheader', state.subheader.trim()); else base.delete('subheader');
+  base.set('auto', state.auto ? 'true' : 'false');
+  base.set('autoSec', String(state.autoSec));
   return base;
 }
 
@@ -236,6 +247,9 @@ const headerText = document.getElementById('headerText');
 const subheaderText = document.getElementById('subheaderText');
 const linkList = document.getElementById('linkList');
 const displayModeGroup = document.getElementById('displayModeGroup');
+const autoToggle = document.getElementById('autoToggle');
+const autoSecInput = document.getElementById('autoSec');
+const autoStatus = document.getElementById('autoStatus');
 
 hueRange.value = state.hue; hueVal.textContent = state.hue;
 debugToggle.checked = !!state.debug; debugVal.textContent = state.debug ? 'true' : 'false';
@@ -245,12 +259,47 @@ headerText.value = state.header; subheaderText.value = state.subheader;
 updateTheme(state.hue); syncHeaderTexts(state); applyToLinks(state); renderHeaderLink();
 replaceUrl(buildParams(state, true));
 
+// Setup auto controls
+autoToggle.checked = !!state.auto;
+autoSecInput.value = state.autoSec;
+autoStatus.textContent = state.auto ? `every ${state.autoSec}s` : 'off';
+let autoTimer = null;
+function getAnchors(){ return Array.from(document.querySelectorAll('#linkList a:not(.download-btn)')); }
+function getCurrentIndex(){
+  const anchors = getAnchors();
+  const active = linkList.querySelector('a.active');
+  if (active) return Math.max(0, anchors.indexOf(active));
+  if (currentSelectedPath){
+    const idx = anchors.findIndex(a => (a.getAttribute('href')||'').split('?')[0] === currentSelectedPath);
+    if (idx >= 0) return idx;
+  }
+  return 0;
+}
+function goTo(index){
+  const anchors = getAnchors(); if (!anchors.length) return;
+  const i = (index % anchors.length + anchors.length) % anchors.length;
+  anchors[i].click();
+}
+function scheduleAuto(){
+  clearInterval(autoTimer);
+  if (!state.auto) return;
+  const step = Math.max(2, state.autoSec) * 1000;
+  autoTimer = setInterval(() => { goTo(getCurrentIndex()+1); }, step);
+}
+function setAuto(on){
+  state.auto = !!on; autoToggle.checked = state.auto; autoStatus.textContent = state.auto ? `every ${state.autoSec}s` : 'off';
+  updateAll(true); scheduleAuto();
+}
+scheduleAuto();
+
 /* Control events */
 hueRange.addEventListener('input',()=>{state.hue=clamp(+hueRange.value,0,360);hueVal.textContent=state.hue;hueColor.value=hslToHex(state.hue,100,50);updateAll();});
 hueColor.addEventListener('input',()=>{const{h}=hexToHsl(hueColor.value);state.hue=Math.round(h);hueRange.value=state.hue;hueVal.textContent=state.hue;updateAll();});
 debugToggle.addEventListener('change',()=>{state.debug=!!debugToggle.checked;debugVal.textContent=state.debug?'true':'false';updateAll();});
 headerText.addEventListener('input',()=>{state.header=headerText.value;updateAll(true);});
 subheaderText.addEventListener('input',()=>{state.subheader=subheaderText.value;updateAll(true);});
+autoToggle.addEventListener('change',()=>{ setAuto(!!autoToggle.checked); });
+autoSecInput.addEventListener('input',()=>{ const v = Math.max(2, Math.min(120, +autoSecInput.value||8)); state.autoSec = v; autoStatus.textContent = state.auto ? `every ${v}s` : 'off'; updateAll(true); scheduleAuto(); });
 
 // <!-- CHANGED: Link click listener updated for active state and mobile UX -->
 linkList.addEventListener('click', (e) => {
@@ -274,6 +323,9 @@ linkList.addEventListener('click', (e) => {
   if (window.innerWidth <= 720) {
     document.getElementById('collapse').checked = false;
   }
+
+  // Reset auto timer on manual navigation
+  if (state.auto) scheduleAuto();
 });
 
 displayModeGroup.addEventListener('change', (event) => {
