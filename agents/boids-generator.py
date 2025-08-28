@@ -8,6 +8,7 @@ parameters and small behavioral variations (wrap vs bounce, shapes, themes).
 Usage:
   python3 agents/boids-generator.py --count 3
   python3 agents/boids-generator.py --out-dir runs/boids-custom --count 2 --dark
+  python3 agents/boids-generator.py --count 4 --index
 
 Defaults:
   - Writes to a timestamped folder in runs/ (created if missing)
@@ -25,6 +26,7 @@ import random
 import textwrap
 import time
 from datetime import datetime
+import subprocess
 
 
 def pick_theme(force_dark: bool | None = None):
@@ -287,6 +289,7 @@ def main():
   ap.add_argument("--out-dir", type=str, default=None, help="output directory (defaults to runs/boids-<timestamp>_pygen)")
   ap.add_argument("--dark", action="store_true", help="force dark theme")
   ap.add_argument("--light", action="store_true", help="force light theme")
+  ap.add_argument("--index", action="store_true", help="build a link viewer (index.html) for the output folder")
   args = ap.parse_args()
 
   if args.dark and args.light:
@@ -329,6 +332,12 @@ def main():
   print("\nPreview: open any of the generated *-impl.html files in a browser.")
   print("Build a viewer for the folder:")
   print(f"  python3 build-link-viewer.sh {out_dir}")
+  if args.index:
+    try:
+      subprocess.run(["python3", "build-link-viewer.sh", out_dir], check=True)
+      print(f"\nBuilt index.html for {out_dir}")
+    except Exception as e:
+      print("Failed to build link viewer:", e)
 
 
 if __name__ == "__main__":

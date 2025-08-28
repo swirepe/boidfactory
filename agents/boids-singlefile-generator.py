@@ -184,6 +184,13 @@ DOC = r"""<!doctype html>
         return Math.max(lo, Math.min(hi, n));
       }
 
+      // Drift a hue value toward a target on a circular color wheel
+      function approachHue(h, target, rate) {
+        // rate is 0..1 fraction toward target per call
+        let d = ((target - h + 540) % 360) - 180; // shortest signed delta [-180,180)
+        return (h + d * Math.max(0, Math.min(1, rate)) + 360) % 360;
+      }
+
       // Lightweight 2D value noise (for perlin-like drag)
       let noiseSeed = (BASE_HUE * 1664525 + 1013904223) & 0xffffffff;
       function fract(x){ return x - Math.floor(x); }
@@ -384,21 +391,28 @@ DOC = r"""<!doctype html>
 
       // Main loop
       let last = performance.now();
+      let fpsAvg = 0;
       function frame(t) {
         const dt = Math.min(32, t - last) * 0.001; // clamp
         last = t;
+        const fpsNow = 1 / Math.max(1e-6, dt);
+        fpsAvg = fpsAvg ? (fpsAvg*0.9 + fpsNow*0.1) : fpsNow;
+        const W = innerWidth, H = innerHeight;
 
         // trails: translucent fill
         ctx.globalCompositeOperation = 'source-over';
-        ctx.fillStyle = 'rgba(5,7,10,' + CFG.trailAlpha + ')';
-        ctx.fillRect(0, 0, innerWidth, innerHeight);
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, Math.min(1, CFG.trailAlpha));
+        ctx.fillStyle = '#05070a';
+        ctx.fillRect(0, 0, W, H);
+        ctx.restore();
 
         // Build quadtree
-        const qt = new Quadtree(0, 0, innerWidth, innerHeight, CFG.qtCap);
+        const qt = new Quadtree(0, 0, W, H, CFG.qtCap);
         for (let i=0;i<N;i++) qt.insert(i, px[i], py[i]);
 
-      // Apply flocking via neighbor queries
-      const vision = CFG.vision; const sep = CFG.sep;
+      // Apply flocking via neighbor queries (adaptive vision under load)
+      const vision = CFG.vision * (fpsAvg < 50 ? 0.9 : 1.0); const sep = CFG.sep;
       for (let i=0;i<N;i++) { ax[i]=0; ay[i]=0; }
       let tmp = [];
       for (let i=0;i<N;i++) {
@@ -437,11 +451,12 @@ DOC = r"""<!doctype html>
       // Interaction effects: ~20+ modes including perlinDrag, lissaPulse, meteor
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
+      let tmp2 = [];
       for (let e=effects.length-1; e>=0; e--) {
         const E = effects[e]; E.t += dt; const k = E.t / E.life;
         const r = 30 + k * 260; const str = 1.0 - k;
         if (E.type === 'meteor') { E.x += (E.vx||0)*dt; E.y += (E.vy||0)*dt; E.vx *= (E.drag||1); E.vy *= (E.drag||1); E.mass *= 0.985; }
-        let tmp2 = []; qt.query(E.x, E.y, r, tmp2);
+        tmp2.length = 0; qt.query(E.x, E.y, r, tmp2);
         for (let ii=0; ii<tmp2.length; ii++) {
           const i = tmp2[ii]; const dx = px[i]-E.x; const dy = py[i]-E.y; const d = Math.hypot(dx, dy)||1;
           const fall = (1 - Math.min(1, d/r));
@@ -528,24 +543,27 @@ DOC = r"""<!doctype html>
 
           // boundaries
           if (CFG.wrap) {
-            if (px[i] < -5) px[i] = innerWidth + 5; else if (px[i] > innerWidth+5) px[i] = -5;
-            if (py[i] < -5) py[i] = innerHeight + 5; else if (py[i] > innerHeight+5) py[i] = -5;
+            if (px[i] < -5) px[i] = W + 5; else if (px[i] > W+5) px[i] = -5;
+            if (py[i] < -5) py[i] = H + 5; else if (py[i] > H+5) py[i] = -5;
           } else {
-            if (px[i] < 0 || px[i] > innerWidth) { vx[i] = -vx[i]; }
-            if (py[i] < 0 || py[i] > innerHeight) { vy[i] = -vy[i]; }
-            px[i] = Math.max(0, Math.min(innerWidth, px[i]));
-            py[i] = Math.max(0, Math.min(innerHeight, py[i]));
+            if (px[i] < 0 || px[i] > W) { vx[i] = -vx[i]; }
+            if (py[i] < 0 || py[i] > H) { vy[i] = -vy[i]; }
+            px[i] = Math.max(0, Math.min(W, px[i]));
+            py[i] = Math.max(0, Math.min(H, py[i]));
           }
 
           // decay modifiers and compute tint
           vBoost[i] *= 0.92; sizeMul[i] *= 0.90; hueOff[i] *= 0.94; jitAmp[i] *= 0.88;
+          // slowly drift boid hue back toward base palette hue
+          hue[i] = approachHue(hue[i], paletteHue, Math.min(1, dt * (CFG.hueRelax || 0.2)));
           spd[i] = Math.hypot(vx[i], vy[i]);
           const L = 50 + Math.min(45, spd[i]*8);
           const S = 80 + Math.min(20, spd[i]*6);
           const drawHue = (hue[i] + hueOff[i]) % 360;
           ctx.strokeStyle = `hsl(${drawHue}, ${S}%, ${L}%)`;
           ctx.shadowColor = `hsl(${drawHue}, 90%, 60%)`;
-          ctx.shadowBlur = CFG.glowBase + Math.min(CFG.glowMax, spd[i]*CFG.glowScale);
+          const glowQuality = (fpsAvg < 50 ? 0.5 : 1.0);
+          ctx.shadowBlur = glowQuality * (CFG.glowBase + Math.min(CFG.glowMax, spd[i]*CFG.glowScale));
 
           // trail segment
           ctx.beginPath();
@@ -555,19 +573,28 @@ DOC = r"""<!doctype html>
 
           // boid head shape
           const ang = Math.atan2(vy[i], vx[i]);
+          const ca = Math.cos(ang), sa = Math.sin(ang);
           ctx.fillStyle = `hsl(${hue[i]}, 95%, ${L}%)`;
           ctx.beginPath();
           const s = CFG.cometSize * (1 + (sizeMul[i]||0));
           if (CFG.shape === 'triangle') {
-            ctx.moveTo(px[i] + Math.cos(ang)*s*1.6, py[i] + Math.sin(ang)*s*1.6);
-            ctx.lineTo(px[i] + Math.cos(ang+2.6)*s,  py[i] + Math.sin(ang+2.6)*s);
-            ctx.lineTo(px[i] + Math.cos(ang-2.6)*s,  py[i] + Math.sin(ang-2.6)*s);
+            const C26 = 0.856888753, S26 = 0.515498; // cos/sin(2.6)
+            const x0 = px[i] + ca*s*1.6, y0 = py[i] + sa*s*1.6;
+            const ca_p = ca*C26 - sa*S26, sa_p = sa*C26 + ca*S26;
+            const ca_m = ca*C26 + sa*S26, sa_m = sa*C26 - ca*S26;
+            ctx.moveTo(x0, y0);
+            ctx.lineTo(px[i] + ca_p*s,  py[i] + sa_p*s);
+            ctx.lineTo(px[i] + ca_m*s,  py[i] + sa_m*s);
           } else if (CFG.shape === 'orb') {
             ctx.arc(px[i], py[i], s*0.6, 0, Math.PI*2);
           } else { // spark
-            ctx.moveTo(px[i] + Math.cos(ang)*s*1.8, py[i] + Math.sin(ang)*s*1.8);
-            ctx.lineTo(px[i] + Math.cos(ang+0.2)*s*0.6,  py[i] + Math.sin(ang+0.2)*s*0.6);
-            ctx.lineTo(px[i] + Math.cos(ang-0.2)*s*0.6,  py[i] + Math.sin(ang-0.2)*s*0.6);
+            const C02 = 0.9800666, S02 = 0.1986693; // cos/sin(0.2)
+            const xh = px[i] + ca*s*1.8, yh = py[i] + sa*s*1.8;
+            const ca_p02 = ca*C02 - sa*S02, sa_p02 = sa*C02 + ca*S02;
+            const ca_m02 = ca*C02 + sa*S02, sa_m02 = sa*C02 - ca*S02;
+            ctx.moveTo(xh, yh);
+            ctx.lineTo(px[i] + ca_p02*s*0.6,  py[i] + sa_p02*s*0.6);
+            ctx.lineTo(px[i] + ca_m02*s*0.6,  py[i] + sa_m02*s*0.6);
           }
           ctx.closePath(); ctx.fill();
         }
@@ -578,7 +605,7 @@ DOC = r"""<!doctype html>
 
         // HUD
         hudEl.innerHTML = `<strong>Boids</strong> · N=${N} vision=${CFG.vision} sep=${CFG.sep} ` +
-          `· qtCap=${CFG.qtCap} · hue=${paletteHue} · qtViz=${CFG.qt?'on':'off'} · click=${CFG.clickMode}`;
+          `· qtCap=${CFG.qtCap} · hue=${paletteHue} · qtViz=${CFG.qt?'on':'off'} · click=${CFG.clickMode} · fps=${fpsAvg.toFixed(0)}`;
 
         requestAnimationFrame(frame);
       }

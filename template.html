@@ -74,6 +74,8 @@
   .radio-group label:has(input:checked){background: var(--border);} 
   .auto-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
   .auto-row input[type=number]{width:80px}
+  .rainbow-row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .rainbow-row input[type=number]{width:80px}
 
   /* Viewer */
   main{min-width:0; display:flex; flex-direction:column}
@@ -138,6 +140,11 @@
         <label>Interval (s): <input id="autoSec" type="number" min="2" max="120" step="1" value="8"></label>
         <span class="pill" id="autoStatus">off</span>
       </div>
+      <div class="row rainbow-row">
+        <label class="switch"><input id="rainbowToggle" type="checkbox"><span>Rainbow</span></label>
+        <label>Period (s): <input id="rainbowSec" type="number" min="2" max="120" step="1" value="20"></label>
+        <span class="pill" id="rainbowStatus">off</span>
+      </div>
     </div>
     <ul id="linkList">
 <!-- LINK_LIST_PLACEHOLDER -->
@@ -153,7 +160,7 @@
   </main>
 </div>
 <script>
-const CONTROL_KEYS = new Set(['hue','debug','header','subheader','auto','autoSec']);
+const CONTROL_KEYS = new Set(['hue','debug','header','subheader','auto','autoSec','rainbow','rainbowSec']);
 let currentSelectedPath = null;
 
 function getInitialState(){
@@ -164,7 +171,9 @@ function getInitialState(){
     header: sp.get('header') ?? '',
     subheader: sp.get('subheader') ?? '',
     auto: (sp.has('auto') ? /^(1|true|yes|on)$/i.test(sp.get('auto')) : false),
-    autoSec: Number.isFinite(+sp.get('autoSec')) ? Math.max(2, Math.min(120, +sp.get('autoSec'))) : 8
+    autoSec: Number.isFinite(+sp.get('autoSec')) ? Math.max(2, Math.min(120, +sp.get('autoSec'))) : 8,
+    rainbow: (sp.has('rainbow') ? /^(1|true|yes|on)$/i.test(sp.get('rainbow')) : false),
+    rainbowSec: Number.isFinite(+sp.get('rainbowSec')) ? Math.max(2, Math.min(120, +sp.get('rainbowSec'))) : 20
   };
   return state;
 }
@@ -177,6 +186,8 @@ function buildParams(state, includeOtherParams=true){
   if (state.subheader && state.subheader.trim()) base.set('subheader', state.subheader.trim()); else base.delete('subheader');
   base.set('auto', state.auto ? 'true' : 'false');
   base.set('autoSec', String(state.autoSec));
+  base.set('rainbow', state.rainbow ? 'true' : 'false');
+  base.set('rainbowSec', String(state.rainbowSec));
   return base;
 }
 
@@ -250,6 +261,9 @@ const displayModeGroup = document.getElementById('displayModeGroup');
 const autoToggle = document.getElementById('autoToggle');
 const autoSecInput = document.getElementById('autoSec');
 const autoStatus = document.getElementById('autoStatus');
+const rainbowToggle = document.getElementById('rainbowToggle');
+const rainbowSecInput = document.getElementById('rainbowSec');
+const rainbowStatus = document.getElementById('rainbowStatus');
 
 hueRange.value = state.hue; hueVal.textContent = state.hue;
 debugToggle.checked = !!state.debug; debugVal.textContent = state.debug ? 'true' : 'false';
@@ -292,6 +306,29 @@ function setAuto(on){
 }
 scheduleAuto();
 
+// Setup rainbow controls
+rainbowToggle.checked = !!state.rainbow;
+rainbowSecInput.value = state.rainbowSec;
+rainbowStatus.textContent = state.rainbow ? `period ${state.rainbowSec}s` : 'off';
+let rainbowRAF = null, rainbowStart = null, rainbowPhase = state.hue;
+function setRainbow(on){
+  state.rainbow = !!on; rainbowToggle.checked = state.rainbow; rainbowStatus.textContent = state.rainbow ? `period ${state.rainbowSec}s` : 'off';
+  if (!state.rainbow) { if (rainbowRAF) cancelAnimationFrame(rainbowRAF); rainbowRAF=null; updateAll(true); return; }
+  rainbowStart = performance.now(); rainbowPhase = state.hue;
+  function tick(){
+    const now = performance.now();
+    const period = Math.max(2, state.rainbowSec) * 1000;
+    const delta = (now - rainbowStart) / period; // cycles per period
+    const h = (rainbowPhase + delta*360) % 360;
+    state.hue = Math.round(h);
+    hueRange.value = state.hue; hueVal.textContent = state.hue; hueColor.value = hslToHex(state.hue,100,50);
+    updateTheme(state.hue); // Do not spam URLs/links every frame
+    rainbowRAF = requestAnimationFrame(tick);
+  }
+  rainbowRAF = requestAnimationFrame(tick);
+}
+if (state.rainbow) setRainbow(true);
+
 /* Control events */
 hueRange.addEventListener('input',()=>{state.hue=clamp(+hueRange.value,0,360);hueVal.textContent=state.hue;hueColor.value=hslToHex(state.hue,100,50);updateAll();});
 hueColor.addEventListener('input',()=>{const{h}=hexToHsl(hueColor.value);state.hue=Math.round(h);hueRange.value=state.hue;hueVal.textContent=state.hue;updateAll();});
@@ -300,6 +337,8 @@ headerText.addEventListener('input',()=>{state.header=headerText.value;updateAll
 subheaderText.addEventListener('input',()=>{state.subheader=subheaderText.value;updateAll(true);});
 autoToggle.addEventListener('change',()=>{ setAuto(!!autoToggle.checked); });
 autoSecInput.addEventListener('input',()=>{ const v = Math.max(2, Math.min(120, +autoSecInput.value||8)); state.autoSec = v; autoStatus.textContent = state.auto ? `every ${v}s` : 'off'; updateAll(true); scheduleAuto(); });
+rainbowToggle.addEventListener('change',()=>{ setRainbow(!!rainbowToggle.checked); });
+rainbowSecInput.addEventListener('input',()=>{ const v = Math.max(2, Math.min(120, +rainbowSecInput.value||20)); state.rainbowSec = v; rainbowStatus.textContent = state.rainbow ? `period ${v}s` : 'off'; updateAll(true); if (state.rainbow) setRainbow(true); });
 
 // <!-- CHANGED: Link click listener updated for active state and mobile UX -->
 linkList.addEventListener('click', (e) => {
