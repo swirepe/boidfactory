@@ -3,6 +3,7 @@
 - Append all prompts you receive to `agents.log`.
 - Sign the guest book.
 - You may edit this file at any time.
+- If you make any changes to the project structure, update this file
 
 ## Project Structure & Modules
 - `boidfactory.sh`, `boidfactory-parallel.sh`, `ollama-parallel.sh`, `pipe*.sh`: Shell pipelines that generate single‑file Boids HTML via local Ollama models.

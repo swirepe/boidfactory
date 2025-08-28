@@ -24,9 +24,29 @@ type Config struct {
     SeparationW float64
     LineWidth   float64
     Wrap        bool
+    // Visual and behavior extensions
+    TrailAlpha  float64
+    BgGradient  bool
+    BgHueShift1 int
+    BgHueShift2 int
+    BgHueShift3 int
+    Qt          bool
+    QtCap       int
+    Flow        bool
+    FlowAmp     float64
+    FlowScale   float64
+    FlowSpeed   float64
+    ShowHud     bool
+    Shape       string
+    Blend       string
+    Spawn       string
 }
 
 func defaultConfig(r *rand.Rand) Config {
+    // Random but sane defaults for more variety
+    shapes := []string{"trail","triangle","dot","comet","ring"}
+    blends := []string{"lighter","plus-lighter","screen","source-over"}
+    spawns := []string{"random","ring","center","edge","grid"}
     return Config{
         Count:       220 + r.IntN(120),
         Vision:      65 + r.Float64()*45,
@@ -39,6 +59,21 @@ func defaultConfig(r *rand.Rand) Config {
         SeparationW: 1.0 + r.Float64()*1.5,
         LineWidth:   1.1 + r.Float64()*0.9,
         Wrap:        r.IntN(2) == 0,
+        TrailAlpha:  0.08 + r.Float64()*0.12,
+        BgGradient:  r.IntN(100) < 85,
+        BgHueShift1: r.IntN(45),
+        BgHueShift2: 30 + r.IntN(150),
+        BgHueShift3: 60 + r.IntN(220),
+        Qt:          r.IntN(100) < 70,
+        QtCap:       10 + r.IntN(20),
+        Flow:        r.IntN(100) < 50,
+        FlowAmp:     0.15 + r.Float64()*0.5,
+        FlowScale:   0.001 + r.Float64()*0.006,
+        FlowSpeed:   0.4 + r.Float64()*1.0,
+        ShowHud:     true,
+        Shape:       shapes[r.IntN(len(shapes))],
+        Blend:       blends[r.IntN(len(blends))],
+        Spawn:       spawns[r.IntN(len(spawns))],
     }
 }
 
@@ -76,6 +111,21 @@ func Generate(seedStr, header, subheader string) (string, error) {
         "CfgSepW":     cfg.SeparationW,
         "CfgLineW":    cfg.LineWidth,
         "CfgWrap":     cfg.Wrap,
+        "CfgTrailAlpha": cfg.TrailAlpha,
+        "CfgBgGradient": cfg.BgGradient,
+        "CfgBgHueShift1": cfg.BgHueShift1,
+        "CfgBgHueShift2": cfg.BgHueShift2,
+        "CfgBgHueShift3": cfg.BgHueShift3,
+        "CfgQt":        cfg.Qt,
+        "CfgQtCap":     cfg.QtCap,
+        "CfgFlow":      cfg.Flow,
+        "CfgFlowAmp":   cfg.FlowAmp,
+        "CfgFlowScale": cfg.FlowScale,
+        "CfgFlowSpeed": cfg.FlowSpeed,
+        "CfgShowHud":   cfg.ShowHud,
+        "CfgShape":     cfg.Shape,
+        "CfgBlend":     cfg.Blend,
+        "CfgSpawn":     cfg.Spawn,
     }
     return executeTemplate(pageTemplate, data)
 }
@@ -119,7 +169,24 @@ func executeTemplate(tpl string, data map[string]any) (string, error) {
     repl("CfgCohW", fmt.Sprint(data["CfgCohW"]))
     repl("CfgSepW", fmt.Sprint(data["CfgSepW"]))
     repl("CfgLineW", fmt.Sprint(data["CfgLineW"]))
+    // Extended fields
+    repl("CfgTrailAlpha", fmt.Sprint(data["CfgTrailAlpha"]))
+    repl("CfgBgHueShift1", fmt.Sprint(data["CfgBgHueShift1"]))
+    repl("CfgBgHueShift2", fmt.Sprint(data["CfgBgHueShift2"]))
+    repl("CfgBgHueShift3", fmt.Sprint(data["CfgBgHueShift3"]))
+    repl("CfgQtCap", fmt.Sprint(data["CfgQtCap"]))
+    repl("CfgFlowAmp", fmt.Sprint(data["CfgFlowAmp"]))
+    repl("CfgFlowScale", fmt.Sprint(data["CfgFlowScale"]))
+    repl("CfgFlowSpeed", fmt.Sprint(data["CfgFlowSpeed"]))
+    repl("CfgShape", fmt.Sprint(data["CfgShape"]))
+    repl("CfgBlend", fmt.Sprint(data["CfgBlend"]))
+    repl("CfgSpawn", fmt.Sprint(data["CfgSpawn"]))
+    // booleans
     if data["CfgWrap"].(bool) { repl("CfgWrap", "true") } else { repl("CfgWrap", "false") }
+    if data["CfgBgGradient"].(bool) { repl("CfgBgGradient", "true") } else { repl("CfgBgGradient", "false") }
+    if data["CfgQt"].(bool) { repl("CfgQt", "true") } else { repl("CfgQt", "false") }
+    if data["CfgFlow"].(bool) { repl("CfgFlow", "true") } else { repl("CfgFlow", "false") }
+    if data["CfgShowHud"].(bool) { repl("CfgShowHud", "true") } else { repl("CfgShowHud", "false") }
     return out, nil
 }
 
