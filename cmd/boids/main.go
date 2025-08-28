@@ -100,7 +100,8 @@ func runServer(addr string) {
             path = "home"
         }
         // Seed from path; produce deterministic variant
-        html, err := generator.GenerateFromSeed(path)
+        // Also set default header to the path, and leave subheader empty unless explicitly set by URL params.
+        html, err := generator.Generate(path, path, "")
         if err != nil {
             http.Error(w, "generation error", 500)
             return

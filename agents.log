@@ -22,3 +22,9 @@ there's a bug in show_help() in boidfactory.sh
 ==== 2025-08-28T04:18:41Z Prompt Start ====
 Let's write a go program (multiple files, templates, etc) where as a command line program it behaves like agents/boids-singlefile-generator.py but it can also be a web server, where /{whatever} is a boids simulation seeded from the value {whatever}
 ==== Prompt End ====
+==== 2025-08-28T04:25:07Z Prompt Start ====
+I want parity with the python program.  Be better than it, if you can.  When serving a page, set the header to {whatever} and leave the subheader empty unless it is explicitly set
+==== Prompt End ====
+==== 2025-08-28T04:28:53Z Prompt Start ====
+yes.  take as much as you can from the python program.
+==== Prompt End ====

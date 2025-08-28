@@ -12,6 +12,15 @@
       .title { margin:16px 16px 2px; font-weight:700; font-size:clamp(18px,3vw,28px); color: var(--accent, #7dd3fc); }
       .subtitle { margin:0 16px 10px; opacity:.85; }
       .hud { position:fixed; left:12px; bottom:12px; padding:8px 10px; border-radius:10px; border:1px solid #00000040; background:#0b1220cc; backdrop-filter: blur(8px) saturate(120%); font-size:12px; }
+      .cfgBtn { position: fixed; top: 12px; right: 12px; z-index: 10; pointer-events: auto; border: 1px solid #00000055; background: #0b1220cc; color: #e6edf3; border-radius: 8px; padding: 6px 8px; cursor: pointer; }
+      .configPanel { position: fixed; top: 56px; right: 12px; width: min(380px, 90vw); max-height: 80vh; overflow: auto; z-index: 20; pointer-events: auto; background: #0b1220e6; color: #e6edf3; border: 1px solid #00000055; border-radius: 10px; box-shadow: 0 10px 40px #0008; backdrop-filter: blur(10px) saturate(120%); }
+      .configHeader { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-bottom: 1px solid #00000055; position: sticky; top: 0; background: #0b1220f2; }
+      .configBody { padding: 10px 12px; display: grid; gap: 10px; }
+      .configBody .row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; }
+      .configBody .rangeRow { display: grid; grid-template-columns: 1fr 72px; gap: 8px; align-items: center; }
+      .cfgClose { border: 1px solid #00000055; background: #121a2bcc; color: #e6edf3; border-radius: 6px; padding: 4px 8px; cursor: pointer; }
+      .configBody input, .configBody select { font-size: 14px; padding: 6px 8px; background: #101827; color: #e6edf3; border: 1px solid #00000055; border-radius: 6px; }
+      .configBody input[type=range] { padding: 0; height: 28px; accent-color: var(--accent, #7dd3fc); background: transparent; }
     </style>
   </head>
   <body>
@@ -20,6 +29,14 @@
       <div class="title" id="title"></div>
       <div class="subtitle" id="subtitle"></div>
       <div class="hud" id="hud"></div>
+    </div>
+    <button id="cfgBtn" class="cfgBtn" aria-label="Open config">⚙︎</button>
+    <div id="config" class="configPanel" hidden>
+      <div class="configHeader">
+        <strong>Config</strong>
+        <button id="cfgClose" class="cfgClose" aria-label="Close">✕</button>
+      </div>
+      <div id="configBody" class="configBody"></div>
     </div>
     <script>
     'use strict';
@@ -38,13 +55,29 @@
       cohesionW: {{CfgCohW}},
       separationW: {{CfgSepW}},
       lineWidth: {{CfgLineW}},
-      wrap: {{CfgWrap}}
+      wrap: {{CfgWrap}},
+      // extended defaults for parity
+      trailAlpha: 0.12,
+      bgGradient: true,
+      bgHueShift1: 0,
+      bgHueShift2: 60,
+      bgHueShift3: 120,
+      qt: true,
+      qtCap: 16,
+      flow: false,
+      flowAmp: 0.25,
+      flowScale: 0.003,
+      flowSpeed: 0.8,
+      showHud: true,
+      shape: 'trail',
+      blend: 'lighter',
+      spawn: 'random'
     };
 
     const params = new URLSearchParams(location.search);
     const BASE_HUE = clampInt(parseInt(params.get('hue')), 0, 360, DEFAULT_HUE);
     const HEADER = params.get('header') || {{HEADER_JSON}};
-    const SUBHEADER = params.get('subheader') || {{SUBHEADER_JSON}};
+    const SUBHEADER = (params.get('subheader') !== null) ? params.get('subheader') : {{SUBHEADER_JSON}};
 
     function clampInt(n, lo, hi, fallback){ n = Number.isFinite(n)?n:fallback; return Math.max(lo, Math.min(hi, n)); }
 
@@ -71,7 +104,16 @@
     resize();
 
     function clearHard(){
-      ctx.fillStyle = '#05070a';
+      if (CFG.bgGradient) {
+        const g = ctx.createRadialGradient(innerWidth*0.65, innerHeight*0.35, Math.min(innerWidth, innerHeight)*0.15,
+                                           innerWidth*0.5, innerHeight*0.5, Math.hypot(innerWidth, innerHeight)*0.7);
+        g.addColorStop(0.0, `hsl(${(BASE_HUE+CFG.bgHueShift1)%360} 80% 10%)`);
+        g.addColorStop(0.5, `hsl(${(BASE_HUE+CFG.bgHueShift2)%360} 70% 8%)`);
+        g.addColorStop(1.0, `hsl(${(BASE_HUE+CFG.bgHueShift3)%360} 60% 6%)`);
+        ctx.fillStyle = g;
+      } else {
+        ctx.fillStyle = '#05070a';
+      }
       ctx.fillRect(0,0,innerWidth,innerHeight);
     }
 
@@ -98,8 +140,9 @@
 
     // Interaction
     let mouseX = innerWidth*0.5, mouseY = innerHeight*0.5; let mouseDown = false;
+    const shocks = [];
     addEventListener('pointermove', (e)=>{ mouseX=e.clientX; mouseY=e.clientY; });
-    addEventListener('pointerdown', ()=>{ mouseDown=true; });
+    addEventListener('pointerdown', ()=>{ mouseDown=true; shocks.push({x:mouseX,y:mouseY,t:0}); });
     addEventListener('pointerup', ()=>{ mouseDown=false; });
 
     const TAU = Math.PI*2;
@@ -112,19 +155,23 @@
 
     function step(){
       const V = CFG.vision, S = CFG.sep, A = CFG.alignW, C = CFG.cohesionW, D = CFG.separationW, MF = CFG.maxForce;
+      // Flow field time
+      flowT += 0.016*CFG.flowSpeed;
+      // Build quadtree
+      let qt = null;
+      if (CFG.qt){ qt = buildQT(); }
       for (let i=0;i<N;i++){
         let n=0, ax=0, ay=0, cx=0, cy=0, sx=0, sy=0;
         const xi=x[i], yi=y[i];
-        for (let j=0;j<N;j++){
-          if (i===j) continue;
+        const neigh = CFG.qt ? queryNeighbors(qt, xi, yi, V, i) : null;
+        const loop = CFG.qt ? neigh : indices;
+        for (let k=0;k<loop.length;k++){
+          const j = loop[k]; if (j===i) continue;
           const dx=x[j]-xi, dy=y[j]-yi; const d2=dx*dx+dy*dy; if (d2>V*V) continue; const d=Math.sqrt(d2);
           n++;
-          // alignment
-          ax+=vx[j]; ay+=vy[j];
-          // cohesion target
-          cx+=x[j]; cy+=y[j];
-          // separation
-          if (d < S){ const f=(S-d)/S; sx-=dx/d*f; sy-=dy/d*f; }
+          ax+=vx[j]; ay+=vy[j]; // alignment
+          cx+=x[j]; cy+=y[j];   // cohesion target
+          if (d < S){ const f=(S-d)/S; sx-=dx/d*f; sy-=dy/d*f; } // separation
         }
         if (n>0){
           ax/=n; ay/=n; // avg velocity
@@ -137,12 +184,19 @@
           // add forces, clamp
           vx[i]+=clamp(sx+cx+ax, -MF, MF); vy[i]+=clamp(sy+cy+ay, -MF, MF);
         }
-
+        // Flow field
+        if (CFG.flow){ const v=perlinVec(x[i]*0.01+flowT, y[i]*0.01-flowT, CFG.flowScale, CFG.flowAmp); vx[i]+=v[0]; vy[i]+=v[1]; }
+        
         // Mouse attract/repel
         if (mouseDown){
           const dx=mouseX-x[i], dy=mouseY-y[i]; const d=Math.hypot(dx,dy)+1e-3;
           const f = Math.min(0.6, 120/(d+40));
           vx[i]+=dx/d*f; vy[i]+=dy/d*f;
+        }
+        // Shockwaves
+        for (let s=0;s<shocks.length;s++){
+          const sh = shocks[s]; const dx=x[i]-sh.x, dy=y[i]-sh.y; const d=Math.hypot(dx,dy)+1e-3; const R = 220+sh.t*420; const w = Math.max(0, 1 - Math.abs(d-R)/60);
+          if (w>0){ const str = 0.8*w; vx[i]+=dx/d*str; vy[i]+=dy/d*str; }
         }
 
         limitVec(i);
@@ -162,12 +216,24 @@
     function len1(x,y){ const l=Math.hypot(x,y)||1; return l; }
     function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
 
-    let last=performance.now(); let frames=0; let acc=0;
+    let last=performance.now(); let frames=0; let acc=0; let flowT=0;
     function render(ts){
       const dt = (ts-last)/1000; last=ts; frames++; acc+=dt; if (acc>0.5){ hudEl.textContent = `FPS: ${Math.round(frames/acc)}`; frames=0; acc=0; }
-      ctx.globalCompositeOperation='lighter';
-      ctx.globalAlpha=0.12; clearHard(); ctx.globalAlpha=1;
+      // Clear/fade background in normal compose so it doesn't brighten
+      const prevOp = ctx.globalCompositeOperation;
+      ctx.globalCompositeOperation='source-over';
+      ctx.globalAlpha=CFG.trailAlpha; clearHard(); ctx.globalAlpha=1;
+      // Switch to draw mode (e.g., additive trails for boids)
+      ctx.globalCompositeOperation=CFG.blend || 'lighter';
       ctx.lineWidth = CFG.lineWidth;
+      // Draw quadtree
+      if (CFG.qt){
+        // Draw overlays in normal composition to avoid additive brightening
+        const saved = ctx.globalCompositeOperation;
+        ctx.globalCompositeOperation='source-over';
+        drawQT();
+        ctx.globalCompositeOperation=saved;
+      }
       for (let i=0;i<N;i++){
         const sp = Math.hypot(vx[i],vy[i]);
         const hue = (paletteHue + sp*30) % 360;
@@ -177,22 +243,133 @@
         ctx.lineTo(x[i]-vx[i]*2, y[i]-vy[i]*2);
         ctx.stroke();
       }
+      // Age shockwaves
+      for (let s=shocks.length-1; s>=0; s--) { shocks[s].t += dt; if (shocks[s].t > 2.5) shocks.splice(s,1); }
       requestAnimationFrame(render);
     }
 
-    // Initialize labels
-    (function initLabels(){
+    // URL overrides for config (parity with Python script)
+    (function urlOverride(){
+      const intKeys = ['count','vision','sep','qtCap','bgHueShift1','bgHueShift2','bgHueShift3'];
+      const numKeys = ['maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','glowBase','glowMax','glowScale','cometSize','flowAmp','flowScale','flowSpeed'];
+      const boolKeys = ['wrap','bgGradient','qt','flow','showHud'];
+      const strKeys = ['shape','blend','spawn'];
+      for (const k of intKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Math.max(-99999, Math.min(99999, parseInt(v))); }
+      for (const k of numKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Number(v); }
+      for (const k of boolKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = (String(v).toLowerCase()==='true' || String(v)==='1'); }
+      for (const k of strKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = v; }
+      const cms = params.get('clickModes'); if (cms) CFG.clickModes = cms.split(',');
+    })();
+
+    function updateUrlFromCfg(extra={}){
       const url = new URL(location.href);
-      url.searchParams.set('hue', BASE_HUE);
+      url.searchParams.set('hue', String(BASE_HUE));
       url.searchParams.set('header', HEADER);
-      url.searchParams.set('subheader', SUBHEADER);
+      if (SUBHEADER !== undefined && SUBHEADER !== null) url.searchParams.set('subheader', SUBHEADER);
+      const keys = ['count','vision','sep','maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','wrap'];
+      for (const k of keys) { if (CFG[k] !== undefined) url.searchParams.set(k, String(CFG[k])); }
+      for (const [k,v] of Object.entries(extra)) url.searchParams.set(k, v);
       history.replaceState(null,'',url.toString());
+    }
+
+    // Initialize labels and sync URL
+    (function initLabels(){
       titleEl.textContent = HEADER;
-      subtitleEl.textContent = SUBHEADER;
+      subtitleEl.textContent = SUBHEADER || '';
+      updateUrlFromCfg();
+      buildConfigUI();
+      document.getElementById('cfgBtn').onclick = ()=>{ document.getElementById('config').hidden = false; };
+      document.getElementById('cfgClose').onclick = ()=>{ document.getElementById('config').hidden = true; };
     })();
 
     requestAnimationFrame(render);
     setInterval(step, 16);
+
+    // Config UI builder (sliders + toggles bound to CFG)
+    function buildConfigUI(){
+      const root = document.getElementById('configBody');
+      root.innerHTML = '';
+
+      const addRange = (label, key, min, max, step, isInt=false)=>{
+        const row = document.createElement('div'); row.className='rangeRow';
+        const wrap = document.createElement('div'); wrap.className='row';
+        const l = document.createElement('label'); l.textContent = label;
+        const val = document.createElement('span'); val.style.minWidth='56px'; val.style.textAlign='right';
+        const input = document.createElement('input'); input.type='range'; input.min=min; input.max=max; input.step=step;
+        const get = ()=> CFG[key];
+        const set = (v)=>{ CFG[key] = isInt ? Math.round(v) : Number(v); };
+        input.value = String(get()); val.textContent = String(get());
+        input.addEventListener('input', ()=>{ set(input.value); val.textContent = String(get()); updateUrlFromCfg(); });
+        wrap.appendChild(l); wrap.appendChild(val);
+        row.appendChild(wrap); row.appendChild(input); root.appendChild(row);
+      };
+
+      const addCheck = (label, key)=>{
+        const row = document.createElement('div'); row.className='row';
+        const l = document.createElement('label'); l.textContent = label;
+        const input = document.createElement('input'); input.type='checkbox'; input.checked = !!CFG[key];
+        input.addEventListener('change', ()=>{ CFG[key] = !!input.checked; updateUrlFromCfg(); });
+        row.appendChild(l); row.appendChild(input); root.appendChild(row);
+      };
+
+      addRange('Count', 'count', 50, 1000, 1, true);
+      addRange('Vision', 'vision', 20, 220, 1);
+      addRange('Separation dist', 'sep', 4, 80, 1);
+      addRange('Max speed', 'maxSpeed', 0.2, 6, 0.1);
+      addRange('Min speed', 'minSpeed', 0.0, 3, 0.1);
+      addRange('Max force', 'maxForce', 0.01, 0.5, 0.01);
+      addRange('Align weight', 'alignW', 0, 3, 0.05);
+      addRange('Cohesion weight', 'cohesionW', 0, 3, 0.05);
+      addRange('Separation weight', 'separationW', 0, 3, 0.05);
+      addRange('Line width', 'lineWidth', 0.2, 6, 0.1);
+      addRange('Trail alpha', 'trailAlpha', 0.0, 0.5, 0.01);
+      addCheck('Wrap', 'wrap');
+      addCheck('Background gradient', 'bgGradient');
+      addRange('BG hue shift 1', 'bgHueShift1', 0, 360, 1, true);
+      addRange('BG hue shift 2', 'bgHueShift2', 0, 360, 1, true);
+      addRange('BG hue shift 3', 'bgHueShift3', 0, 360, 1, true);
+      addCheck('Quadtree (viz)', 'qt');
+      addRange('Quadtree cap', 'qtCap', 4, 64, 1, true);
+      addCheck('Flow field', 'flow');
+      addRange('Flow amplitude', 'flowAmp', 0, 2, 0.05);
+      addRange('Flow scale', 'flowScale', 0.0005, 0.02, 0.0005);
+      addRange('Flow speed', 'flowSpeed', 0, 3, 0.05);
+    }
+
+    // Simple quadtree implementation for neighbor queries and visualization
+    const indices = Array.from({length:N}, (_,i)=>i);
+    let qtree=null;
+    function QTNode(x,y,w,h,depth){ this.x=x; this.y=y; this.w=w; this.h=h; this.d=depth; this.p=[]; this.c=null; }
+    function subdiv(n){
+      const hw=n.w/2, hh=n.h/2;
+      n.c=[ new QTNode(n.x, n.y, hw, hh, n.d+1), new QTNode(n.x+hw, n.y, hw, hh, n.d+1), new QTNode(n.x, n.y+hh, hw, hh, n.d+1), new QTNode(n.x+hw, n.y+hh, hw, hh, n.d+1) ];
+      for (const idx of n.p){ insert(n, idx); }
+      n.p.length=0;
+    }
+    function insert(n, i){
+      if (n.c){ return insert(n.c[childIndex(n, x[i], y[i])], i); }
+      n.p.push(i);
+      if (n.p.length > CFG.qtCap && n.w>32 && n.h>32 && n.d<12){ subdiv(n); }
+      return true;
+    }
+    function childIndex(n, px, py){ const right = px >= n.x + n.w/2; const bottom = py >= n.y + n.h/2; return (bottom?2:0) + (right?1:0); }
+    function buildQT(){
+      qtree = new QTNode(0,0,innerWidth,innerHeight,0);
+      for (let i=0;i<N;i++){ insert(qtree, i); }
+      return qtree;
+    }
+    function drawQT(){ if (!qtree) return; ctx.save(); ctx.strokeStyle='#1f2937'; drawNode(qtree); ctx.restore(); }
+    function drawNode(n){ if (!n) return; ctx.strokeRect(n.x, n.y, n.w, n.h); if (n.c){ for (const c of n.c) drawNode(c); } }
+    function queryNeighbors(root, px, py, rad, selfIdx){ if (!root) return indices; const out=[]; queryNode(root, px, py, rad, out); return out; }
+    function queryNode(n, px, py, r, out){ if (!n || !intersects(n, px, py, r)) return; if (n.c){ for (const c of n.c) queryNode(c, px, py, r, out); } else { for (const i of n.p) out.push(i); } }
+    function intersects(n, px, py, r){ const nx=Math.max(n.x, Math.min(px, n.x+n.w)); const ny=Math.max(n.y, Math.min(py, n.y+n.h)); const dx=px-nx, dy=py-ny; return dx*dx+dy*dy <= r*r; }
+
+    // Simple 2D noise-based flow
+    let noiseSeed = (DEFAULT_HUE * 1664525 + 1013904223) >>> 0;
+    function fract(x){ return x - Math.floor(x); }
+    function _rand(ix, iy){ const k = ((ix|0) * 374761393 + (iy|0) * 668265263 + noiseSeed) >>> 0; return fract(Math.sin(k) * 43758.5453); }
+    function noise2(x, y){ const xi = Math.floor(x), yi = Math.floor(y); const xf = x - xi, yf = y - yi; const u = xf*xf*(3-2*xf), v = yf*yf*(3-2*yf); const v00 = _rand(xi, yi), v10 = _rand(xi+1, yi), v01 = _rand(xi, yi+1), v11 = _rand(xi+1, yi+1); const x1 = v00*(1-u) + v10*u, x2 = v01*(1-u) + v11*u; return x1*(1-v) + x2*v; }
+    function perlinVec(x, y, scale, amp){ const n = noise2(x*scale, y*scale); const a = n * Math.PI*2; return [Math.cos(a)*amp, Math.sin(a)*amp]; }
 
     </script>
   </body>

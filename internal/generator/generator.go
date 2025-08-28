@@ -51,18 +51,20 @@ func seedFromString(s string) uint64 {
 }
 
 // GenerateFromSeed returns the single-file HTML using a deterministic seed string.
-func GenerateFromSeed(seedStr string) (string, error) {
+func Generate(seedStr, header, subheader string) (string, error) {
     seed := seedFromString(seedStr)
     r := rand.New(rand.NewPCG(uint64(seed>>1), uint64(seed<<1)|1))
     cfg := defaultConfig(r)
     hue := int(r.IntN(360))
     title := fmt.Sprintf("Boids (Go) · N=%d · hue=%d", cfg.Count, hue)
+    if header == "" { header = "Boids — Go generator" }
+    // If subheader empty, leave it empty by default. Only show when explicitly set via URL or caller.
     data := map[string]any{
         "Title":       title,
         "DefaultHue":  hue,
         "Seed":        seed,
-        "Header":      "Boids — Go generator",
-        "Subheader":   "Single-file canvas · alignment/cohesion/separation",
+        "Header":      header,
+        "Subheader":   subheader,
         "CfgCount":    cfg.Count,
         "CfgVision":   cfg.Vision,
         "CfgSep":      cfg.Sep,
@@ -76,6 +78,10 @@ func GenerateFromSeed(seedStr string) (string, error) {
         "CfgWrap":     cfg.Wrap,
     }
     return executeTemplate(pageTemplate, data)
+}
+
+func GenerateFromSeed(seedStr string) (string, error) {
+    return Generate(seedStr, "", "")
 }
 
 // WriteFile writes a generated HTML to the folder. When idx is nil, it uses the non-indexed name.
