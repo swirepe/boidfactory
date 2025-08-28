@@ -110,23 +110,26 @@
         #stats-overlay { right: 10px; width: 320px; text-align: left; }
         #help-overlay { right: 10px; width: 450px; }
 
+        /* Code Pane: supports docking to bottom, left, or maximized */
         #code-pane {
             position: fixed;
-            bottom: 0;
-            left: 0;
-            width: 100%;
             background-color: var(--overlay-bg-color);
-            border-top: 2px solid var(--border-color);
-            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1);
-            transform: translateY(calc(100% - 40px));
             z-index: 1000;
             display: flex;
             flex-direction: column;
+            transition: transform 0.4s cubic-bezier(0.25, 1, 0.5, 1), width 0.2s, height 0.2s;
         }
-        #code-pane.visible {
-            transform: translateY(0);
-            height: 40vh;
-        }
+        /* Bottom dock (default) */
+        #code-pane.dock-bottom { left: 0; bottom: 0; width: 100%; border-top: 2px solid var(--border-color); }
+        #code-pane.dock-bottom:not(.visible) { transform: translateY(calc(100% - 40px)); }
+        #code-pane.dock-bottom.visible { transform: translateY(0); height: 40vh; }
+        /* Left dock */
+        #code-pane.dock-left { top: 0; left: 0; height: 100vh; width: 40vw; min-width: 320px; border-right: 2px solid var(--border-color); }
+        #code-pane.dock-left:not(.visible) { transform: translateX(calc(-100% + 48px)); }
+        #code-pane.dock-left.visible { transform: translateX(0); }
+        /* Maximized */
+        #code-pane.maximized { top: 0; left: 0; width: 100vw; height: 100vh; border-top: 2px solid var(--border-color); transform: none !important; }
+        #code-pane.maximized .code-pane-toggle { background-color: var(--primary-color); }
         .code-pane-toggle {
             background-color: var(--primary-color);
             color: white;
@@ -137,6 +140,25 @@
             font-size: 16px;
             font-family: var(--font-mono);
         }
+        /* Dock controls (positioned on the right of the header bar) */
+        .dock-controls {
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            display: flex;
+            gap: 6px;
+        }
+        .dock-btn {
+            background: rgba(0,0,0,0.25);
+            border: 1px solid rgba(255,255,255,0.15);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            font-size: 12px;
+        }
+        .dock-btn.active { border-color: var(--primary-color); color: var(--primary-color); background: rgba(0,0,0,0.35); }
         .code-tabs {
             display: flex;
             flex-shrink: 0;
@@ -175,10 +197,11 @@
         .tab-content.active {
             display: block;
         }
-        .CodeMirror {
-            height: calc(40vh - 80px) !important;
-            border: none;
-        }
+        /* Editor sizing by dock mode */
+        .CodeMirror { border: none; }
+        #code-pane.dock-bottom.visible .CodeMirror { height: calc(40vh - 92px) !important; }
+        #code-pane.dock-left .CodeMirror { height: calc(100vh - 92px) !important; }
+        #code-pane.maximized .CodeMirror { height: calc(100vh - 92px) !important; }
         .config-item {
             margin-bottom: 12px;
         }
@@ -256,8 +279,14 @@
     <div class="overlay" id="stats-overlay"></div>
     <div class="overlay" id="help-overlay"></div>
 
-    <div id="code-pane">
-        <button class="code-pane-toggle">Code</button>
+    <div id="code-pane" class="dock-bottom">
+        <button class="code-pane-toggle">Code
+            <span class="dock-controls" aria-label="Code pane docking controls">
+                <button class="dock-btn" data-dock="bottom" title="Dock bottom">Bottom</button>
+                <button class="dock-btn" data-dock="left" title="Dock left">Left</button>
+                <button class="dock-btn" data-dock="max" title="Maximize">Max</button>
+            </span>
+        </button>
         <div class="code-tabs">
             <button class="tab-button active" data-tab="cohesion">Cohesion</button>
             <button class="tab-button" data-tab="separation">Separation</button>
@@ -629,7 +658,9 @@ return mouseForce;`
                 perceptionRadius: 50, visualizeQuadtree: true, debug: false,
                 cohesionWeight: 1.0, separationWeight: 1.5, alignmentWeight: 1.0, novelWeight: 1.2,
                 boidShape: 'triangle', boidSize: 10, boidSizeVariance: 2,
-                header: "Boids Simulation", subheader: "Click and drag to interact", ...urlParams
+                header: "Boids Simulation", subheader: "Click and drag to interact",
+                codePaneDock: 'bottom', // bottom | left | max
+                ...urlParams
             };
             logConfig('Initial config:', config);
             userFunctions.push(
@@ -640,6 +671,7 @@ return mouseForce;`
             );
             setupUI();
             setupCodePane();
+            applyDockMode(config.codePaneDock);
             createBoids();
             window.addEventListener('resize', debounce(setupCanvas, 250));
             canvas.addEventListener('mousemove', e => { mouse.pos.x = e.clientX; mouse.pos.y = e.clientY; });
@@ -683,13 +715,50 @@ return mouseForce;`
                 closeBtn.onclick = () => overlay.classList.remove('visible');
                 overlay.prepend(closeBtn);
             });
-            document.querySelector('.code-pane-toggle').addEventListener('click', () => {
-                document.getElementById('code-pane').classList.toggle('visible');
-                Object.values(editors).forEach(editor => editor.refresh());
+            const codePane = document.getElementById('code-pane');
+            document.querySelector('.code-pane-toggle').addEventListener('click', (e) => {
+                // Ignore clicks on dock control buttons inside the header
+                if (e.target && e.target.classList.contains('dock-btn')) return;
+                codePane.classList.toggle('visible');
+                refreshEditors();
+            });
+            // Dock controls
+            document.querySelectorAll('.dock-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    const mode = e.currentTarget.getAttribute('data-dock');
+                    config.codePaneDock = mode === 'max' ? 'max' : (mode === 'left' ? 'left' : 'bottom');
+                    applyDockMode(config.codePaneDock);
+                    if (config.debug) updateAllURLParams(); else updateURL('codePaneDock', config.codePaneDock);
+                });
             });
             setupConfigUI();
             setupStatsUI();
             setupHelpUI();
+        }
+
+        function applyDockMode(mode) {
+            const pane = document.getElementById('code-pane');
+            pane.classList.remove('dock-bottom', 'dock-left', 'maximized');
+            document.querySelectorAll('.dock-btn').forEach(b => b.classList.remove('active'));
+            if (mode === 'left') {
+                pane.classList.add('dock-left');
+                document.querySelector('.dock-btn[data-dock="left"]').classList.add('active');
+            } else if (mode === 'max' || mode === 'maximized') {
+                pane.classList.add('maximized', 'visible');
+                document.querySelector('.dock-btn[data-dock="max"]').classList.add('active');
+            } else {
+                pane.classList.add('dock-bottom');
+                document.querySelector('.dock-btn[data-dock="bottom"]').classList.add('active');
+            }
+            // Ensure visibility state is meaningful in each mode
+            if (mode !== 'max' && !pane.classList.contains('visible')) {
+                // keep collapsed state for bottom/left unless already visible
+            }
+            refreshEditors();
+        }
+
+        function refreshEditors() {
+            Object.values(editors).forEach(editor => editor.refresh());
         }
 
         function setupConfigUI() {
