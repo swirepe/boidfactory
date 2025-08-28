@@ -132,6 +132,15 @@
       flowSpeed: {{CfgFlowSpeed}},
       flowViz: {{CfgFlowViz}},
       flowVizStep: {{CfgFlowVizStep}},
+      flowMode: '{{CfgFlowMode}}',
+      flowAmpVar: {{CfgFlowAmpVar}},
+      flowAniso: {{CfgFlowAniso}},
+      flowOctaves: {{CfgFlowOctaves}},
+      flowColor: {{CfgFlowColor}},
+      flowHueScale: {{CfgFlowHueScale}},
+      flowColorMode: '{{CfgFlowColorMode}}',
+      showHeader: {{CfgShowHeader}},
+      showSubheader: {{CfgShowSubheader}},
       showHud: {{CfgShowHud}},
       shape: '{{CfgShape}}',
       blend: '{{CfgBlend}}',
@@ -333,7 +342,18 @@
       }
       for (let i=0;i<N;i++){
         const spd = Math.hypot(vx[i],vy[i]);
-        const hue = (paletteHue + spd*30) % 360;
+        let hue = (paletteHue + spd*30) % 360;
+        if (CFG.flowColor){
+          const v = flowVec(x[i], y[i], 1);
+          const ang = Math.atan2(v[1], v[0]);
+          const mag = Math.hypot(v[0], v[1]);
+          const k = Math.max(0, Number(CFG.flowHueScale)||0) / 180; // 0..1
+          if (String(CFG.flowColorMode||'angle') === 'strength'){
+            hue = (hue + Math.min(360, mag*360) * k) % 360;
+          } else {
+            hue = (hue + (ang/Math.PI)*180 * k) % 360;
+          }
+        }
         const mode = (CFG.shape||'trail').toLowerCase();
         switch (mode){
           case 'triangle': {
@@ -388,9 +408,9 @@
     // URL overrides for config (parity with Python script)
     (function urlOverride(){
       const intKeys = ['count','vision','sep','qtCap','bgHueShift1','bgHueShift2','bgHueShift3','flowOctaves'];
-      const numKeys = ['maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','glowBase','glowMax','glowScale','cometSize','flowAmp','flowScale','flowSpeed','flowVizStep','flowAmpVar','flowAniso'];
-      const boolKeys = ['wrap','bgGradient','qt','flow','flowViz','showHud','showHeader','showSubheader'];
-      const strKeys = ['shape','blend','spawn','flowMode'];
+      const numKeys = ['maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','glowBase','glowMax','glowScale','cometSize','flowAmp','flowScale','flowSpeed','flowVizStep','flowAmpVar','flowAniso','flowHueScale'];
+      const boolKeys = ['wrap','bgGradient','qt','flow','flowViz','showHud','showHeader','showSubheader','flowColor'];
+      const strKeys = ['shape','blend','spawn','flowMode','flowColorMode'];
       for (const k of intKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Math.max(-99999, Math.min(99999, parseInt(v))); }
       for (const k of numKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = Number(v); }
       for (const k of boolKeys) { const v = params.get(k); if (v!=null && v!=='') CFG[k] = (String(v).toLowerCase()==='true' || String(v)==='1'); }
@@ -407,7 +427,7 @@
         'count','vision','sep','maxSpeed','minSpeed','maxForce','alignW','cohesionW','separationW','trailAlpha','lineWidth','wrap',
         'bgGradient','bgHueShift1','bgHueShift2','bgHueShift3',
         'qt','qtCap',
-        'flow','flowAmp','flowScale','flowSpeed','flowViz','flowVizStep','flowAmpVar','flowAniso','flowOctaves','flowMode',
+        'flow','flowAmp','flowScale','flowSpeed','flowViz','flowVizStep','flowAmpVar','flowAniso','flowOctaves','flowMode','flowColor','flowHueScale','flowColorMode',
         'shape','blend','spawn','showHud','showHeader','showSubheader'
       ];
       for (const k of keys) { if (CFG[k] !== undefined) url.searchParams.set(k, String(CFG[k])); }
@@ -500,6 +520,8 @@
       };
       addSelect('Flow mode', 'flowMode', ['angle','curl','turbulence']);
       addRange('Flow octaves', 'flowOctaves', 1, 6, 1, true);
+      addCheck('Flow color', 'flowColor');
+      addRange('Flow hue influence', 'flowHueScale', 0, 180, 5);
 
       addSelect('Blend', 'blend', ['lighter','plus-lighter','screen','source-over']);
       addSelect('Shape', 'shape', ['trail','triangle','dot','comet','ring']);

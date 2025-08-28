@@ -44,6 +44,10 @@ type Config struct {
     FlowAmpVar  float64 // 0..1 amplitude variation
     FlowAniso   float64 // -0.9..3 anisotropy factor on Y scale
     FlowOctaves int     // for turbulence
+    // Flow-driven coloring
+    FlowColor     bool
+    FlowHueScale  float64 // 0..180 degrees of influence
+    FlowColorMode string  // angle | strength
     // Overlay visibility
     ShowHeader     bool
     ShowSubheader  bool
@@ -87,6 +91,9 @@ func defaultConfig(r *rand.Rand) Config {
         FlowAmpVar:  r.Float64()*0.5,
         FlowAniso:   (r.Float64()*0.6) - 0.2, // slightly anisotropic by default
         FlowOctaves: 1 + r.IntN(4),
+        FlowColor:   true,
+        FlowHueScale: 40 + r.Float64()*80, // 40..120 deg
+        FlowColorMode: []string{"angle","strength"}[r.IntN(2)],
         ShowHeader:  true,
         ShowSubheader: true,
         ShowHud:     true,
@@ -147,6 +154,9 @@ func Generate(seedStr, header, subheader string) (string, error) {
         "CfgFlowAmpVar": cfg.FlowAmpVar,
         "CfgFlowAniso":  cfg.FlowAniso,
         "CfgFlowOctaves": cfg.FlowOctaves,
+        "CfgFlowColor":  cfg.FlowColor,
+        "CfgFlowHueScale": cfg.FlowHueScale,
+        "CfgFlowColorMode": cfg.FlowColorMode,
         "CfgShowHeader":  cfg.ShowHeader,
         "CfgShowSubheader": cfg.ShowSubheader,
         "CfgShowHud":   cfg.ShowHud,
@@ -210,6 +220,8 @@ func executeTemplate(tpl string, data map[string]any) (string, error) {
     repl("CfgFlowAmpVar", fmt.Sprint(data["CfgFlowAmpVar"]))
     repl("CfgFlowAniso", fmt.Sprint(data["CfgFlowAniso"]))
     repl("CfgFlowOctaves", fmt.Sprint(data["CfgFlowOctaves"]))
+    repl("CfgFlowHueScale", fmt.Sprint(data["CfgFlowHueScale"]))
+    repl("CfgFlowColorMode", fmt.Sprint(data["CfgFlowColorMode"]))
     repl("CfgShape", fmt.Sprint(data["CfgShape"]))
     repl("CfgBlend", fmt.Sprint(data["CfgBlend"]))
     repl("CfgSpawn", fmt.Sprint(data["CfgSpawn"]))
@@ -219,6 +231,7 @@ func executeTemplate(tpl string, data map[string]any) (string, error) {
     if data["CfgQt"].(bool) { repl("CfgQt", "true") } else { repl("CfgQt", "false") }
     if data["CfgFlow"].(bool) { repl("CfgFlow", "true") } else { repl("CfgFlow", "false") }
     if data["CfgFlowViz"].(bool) { repl("CfgFlowViz", "true") } else { repl("CfgFlowViz", "false") }
+    if data["CfgFlowColor"].(bool) { repl("CfgFlowColor", "true") } else { repl("CfgFlowColor", "false") }
     if data["CfgShowHeader"].(bool) { repl("CfgShowHeader", "true") } else { repl("CfgShowHeader", "false") }
     if data["CfgShowSubheader"].(bool) { repl("CfgShowSubheader", "true") } else { repl("CfgShowSubheader", "false") }
     if data["CfgShowHud"].(bool) { repl("CfgShowHud", "true") } else { repl("CfgShowHud", "false") }
