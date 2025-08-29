@@ -2534,6 +2534,147 @@ if (oppN) {
 }
 return steer;` },
 
+          { id: 'nature-murmuration-spiral', name: 'Nature — Murmuration Spiral', code: `/**
+  Murmuration Spiral
+  Orbit gently around local centroid with a spiral bias, evoking starling murmurations.
+  Visuals: Soft spiral arcs from the boid toward the centroid.
+  @returns {Vector}
+*/
+let c = new Vector(); let n = 0; const R = config.perceptionRadius;
+for (const o of neighbors){ const d=Vector.dist(boid.pos,o.pos); if(d>0&&d<R){ c.add(o.pos); n++; } }
+if (!n) return new Vector(); c.div(n);
+const toC = Vector.sub(c, boid.pos); const tang = new Vector(-toC.y, toC.x).normalize();
+const desired = tang.mult(boid.maxSpeed*0.7).add(toC.normalize().mult(boid.maxSpeed*0.15));
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; const tx=tang.x, ty=tang.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(x+tx*10, y+ty*10, c.x, c.y); ctx.strokeStyle='hsla(' + (((config.hue+40)%360)) + ',100%,70%,0.16)'; ctx.lineWidth=1; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'nature-thermal-soaring', name: 'Nature — Thermal Soaring', code: `/**
+  Thermal Soaring
+  Circle in rising air columns (thermals); strength decreases with radius.
+  Visuals: Concentric rings at thermal centers; tangent arrows for boids.
+  @returns {Vector}
+*/
+const thermals=[ new Vector(gameState.width*0.3, gameState.height*0.5), new Vector(gameState.width*0.7, gameState.height*0.4) ];
+let bestT=null, bestD=1e9; for(const t of thermals){ const d=Vector.dist(boid.pos,t); if(d<bestD){ bestD=d; bestT=t; } }
+const toT=Vector.sub(bestT, boid.pos); const r=Math.max(1,toT.mag()); const tang=new Vector(-toT.y, toT.x).normalize();
+const desired=tang.mult(boid.maxSpeed*Math.min(1,160/r)).add(toT.normalize().mult(boid.maxSpeed*0.12));
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ for(let i=1;i<=3;i++){ ctx.beginPath(); ctx.arc(bestT.x,bestT.y, i*28, 0, Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+60)%360)) + ',100%,70%,' + (0.14-i*0.03) + ')'; ctx.stroke(); } }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.85);` },
+
+          { id: 'nature-river-meander', name: 'Nature — River Meander', code: `/**
+  River Meander
+  Follow a 2D meandering flow field resembling river curves.
+  Visuals: Short blue flow hints in local direction.
+  @returns {Vector}
+*/
+const ax=boid.pos.x*0.006, ay=boid.pos.y*0.01; const ang=Math.sin(ax*2.0)+Math.cos(ay*1.5);
+const dir=new Vector(Math.cos(ang), Math.sin(ang*0.6)).normalize();
+const desired=dir.mult(boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.15){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+dir.x*12,y+dir.y*12); ctx.strokeStyle='hsla(' + (((config.hue+200)%360)) + ',100%,70%,0.22)'; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'nature-phyllotaxis-orbit', name: 'Nature — Phyllotaxis Orbit', code: `/**
+  Phyllotaxis Orbit
+  Orbit center with golden-angle radial drift for sunflower-like patterns.
+  Visuals: Golden angle spoke marker.
+  @returns {Vector}
+*/
+const center=new Vector(gameState.width/2, gameState.height/2); const GA=2.399963229728653; // golden angle
+const to=Vector.sub(boid.pos, center); const r=to.mag(); const tang=new Vector(-to.y, to.x).normalize();
+const desired=tang.mult(boid.maxSpeed*0.8).add(to.normalize().mult(Math.sin(boid.pos.x*0.002+boid.pos.y*0.002)*0.2));
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const a=Math.atan2(to.y,to.x); const mark=new Vector(Math.cos(a+GA)*14, Math.sin(a+GA)*14); api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(boid.pos.x, boid.pos.y); ctx.lineTo(boid.pos.x+mark.x, boid.pos.y+mark.y); ctx.strokeStyle='hsla(' + (((config.hue+20)%360)) + ',100%,70%,0.22)'; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'nature-pollen-drift', name: 'Nature — Pollen Drift', code: `/**
+  Pollen Drift
+  Gentle random drift with weak attraction to flower sources; leaves fine trails.
+  Visuals: Tiny twinkle dots; soft trails via pheromones.
+  @returns {Vector}
+*/
+const flowers=[ new Vector(gameState.width*0.2,gameState.height*0.7), new Vector(gameState.width*0.8,gameState.height*0.3) ];
+let best=null, bestD=1e9; for(const f of flowers){ const d=Vector.dist(boid.pos,f); if(d<bestD){ bestD=d; best=f; } }
+let desired=Vector.random2D().mult(boid.maxSpeed*0.3).add(Vector.sub(best,boid.pos).normalize().mult(boid.maxSpeed*0.3));
+if (typeof api!=='undefined'&&api&&api.depositTrail){ api.depositTrail(boid.pos.x,boid.pos.y,0.4); }
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.15){ const x=boid.pos.x+(Math.random()-0.5)*6, y=boid.pos.y+(Math.random()-0.5)*6; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y,1.6,0,Math.PI*2); ctx.fillStyle='hsla(' + (((config.hue+70)%360)) + ',100%,70%,0.28)'; ctx.fill(); }); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.7);` },
+
+          { id: 'nature-predator-shadow', name: 'Nature — Predator Shadow', code: `/**
+  Predator Shadow
+  Avoid a soaring raptor shadow that circles the scene.
+  Visuals: Predator circle marker; away arrows.
+  @returns {Vector}
+*/
+const t=performance.now()/1500; const cx=gameState.width*0.5, cy=gameState.height*0.5; const pred=new Vector(cx+Math.cos(t)*220, cy+Math.sin(t*0.9)*180);
+const away=Vector.sub(boid.pos, pred); const d=Math.max(1,away.mag());
+const desired=away.normalize().mult(boid.maxSpeed*Math.min(1.2, 200/d));
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(pred.x,pred.y,18,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+350)%360)) + ',100%,70%,0.22)'; ctx.stroke(); }); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'nature-dipole-field', name: 'Nature — Magnetic Dipole Field', code: `/**
+  Magnetic Dipole Field (Nature‑ish)
+  Two poles induce curved field lines; boids follow tangents.
+  Visuals: Curving field segments between poles.
+  @returns {Vector}
+*/
+const p1=new Vector(gameState.width*0.35,gameState.height*0.5), p2=new Vector(gameState.width*0.65,gameState.height*0.5);
+function fVec(c){ const d=Vector.sub(boid.pos,c); const r2=Math.max(25, d.x*d.x+d.y*d.y); return new Vector(-d.y/r2, d.x/r2); }
+const dir=fVec(p1).add(fVec(p2)); const desired=dir.normalize().mult(boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.2){ const x=boid.pos.x,y=boid.pos.y; const u=dir.clone().normalize(); api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+u.x*14,y+u.y*14); ctx.strokeStyle='hsla(' + (((config.hue+180)%360)) + ',100%,70%,0.18)'; ctx.stroke(); }); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.85);` },
+
+          { id: 'nature-surface-waves', name: 'Nature — Surface Waves', code: `/**
+  Surface Waves
+  Traveling sinusoidal waves modulate headings; evokes ripples on water.
+  Visuals: Parallel wave bands across the canvas.
+  @returns {Vector}
+*/
+const kx=0.02, ky=0.015, w=performance.now()/800; const ph=Math.sin(boid.pos.x*kx + boid.pos.y*ky + w);
+const base=new Vector(1,0); const ort=new Vector(0,1);
+const dir=new Vector(base.x + ort.x*ph, base.y + ort.y*ph).normalize();
+const desired=dir.mult(boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.08){ api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+190)%360)) + ',100%,70%,0.08)'; for(let y=40;y<gameState.height;y+=60){ ctx.beginPath(); for(let x=0;x<gameState.width;x+=12){ const py=y+6*Math.sin(x*kx + y*ky + w); if(x===0) ctx.moveTo(x,py); else ctx.lineTo(x,py); } ctx.stroke(); } }); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'nature-bee-waggle', name: 'Nature — Bee Waggle', code: `/**
+  Bee Waggle
+  Near the hive, perform a figure‑8 waggle dance; otherwise travel to flowers.
+  Visuals: Figure‑8 loop and hive marker.
+  @returns {Vector}
+*/
+const hive=new Vector(gameState.width*0.15, gameState.height*0.6); const flowers=[ new Vector(gameState.width*0.8, gameState.height*0.3) ];
+const toH=Vector.sub(hive,boid.pos); const d=toH.mag();
+let desired;
+if (d<120){ const t=performance.now()/600; const fx=Math.sin(t)*0.8, fy=Math.sin(t*2)*0.4; desired=new Vector(fx,fy).normalize().mult(boid.maxSpeed*0.7); }
+else { const f=flowers[0]; desired=Vector.sub(f,boid.pos).normalize().mult(boid.maxSpeed*0.85); }
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(hive.x,hive.y,10,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+50)%360)) + ',100%,70%,0.22)'; ctx.stroke(); }); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'nature-coral-branch-trails', name: 'Nature — Coral Branch Trails', code: `/**
+  Coral Branch Trails
+  Deposit trails; move along gentle branching curves.
+  Visuals: Faint branching trails forming coral‑like structures.
+  @returns {Vector}
+*/
+const aX=Math.sin(boid.pos.y*0.01)*0.6, aY=Math.cos(boid.pos.x*0.01)*0.6; const dir=new Vector(aX, aY).normalize();
+const desired=dir.mult(boid.maxSpeed*0.7);
+if (typeof api!=='undefined'&&api&&api.depositTrail){ api.depositTrail(boid.pos.x,boid.pos.y,0.7); }
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.12){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.quadraticCurveTo(x+dir.y*6, y-dir.x*6, x+dir.x*10, y+dir.y*10); ctx.strokeStyle='hsla(' + (((config.hue+160)%360)) + ',100%,70%,0.18)'; ctx.stroke(); }); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.7);` },
+
+          { id: 'nature-karman-vortex-street', name: 'Nature — Kármán Vortex Street', code: `/**
+  Kármán Vortex Street (Behind Obstacles)
+  Two obstacles shed alternating vortices that swirl boids downstream.
+  Visuals: Obstacle markers; circular swirl hints.
+  @returns {Vector}
+*/
+const obs=[ new Vector(gameState.width*0.35, gameState.height*0.5), new Vector(gameState.width*0.55, gameState.height*0.52) ];
+let force=new Vector(); const t=performance.now()/900;
+for(let i=0;i<obs.length;i++){ const o=obs[i]; const off=i%2===0?1:-1; const d=Vector.sub(boid.pos,o); const r=Math.max(1,d.mag()); const swirl=new Vector(-d.y, d.x).normalize().mult(off*Math.min(1,160/r)); force.add(swirl); }
+const flow=new Vector(1,0).mult(0.4);
+const desired=force.add(flow).normalize().mult(boid.maxSpeed*0.85);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ for(const o of obs){ ctx.beginPath(); ctx.arc(o.x,o.y,6,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+20)%360)) + ',100%,70%,0.22)'; ctx.stroke(); } }); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.85);` },
+
           { id: 'ai-pca-principal-flow', name: 'ML — PCA Principal Flow', code: `/**
   PCA Principal Flow
   Estimate local covariance from neighbor relative positions; steer along the first principal component.
@@ -3334,6 +3475,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                         <select id="preset-bundle" style="background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
                             <option value="none">None</option>
                             <option value="ai-ml-pack">AI/ML Pack</option>
+                            <option value="nature-pack">Nature Pack</option>
                             <option value="clustering-pack">Clustering Pack</option>
                             <option value="optimization-pack">Optimization Pack</option>
                             <option value="graphs-pack">Graphs Pack</option>
@@ -3510,7 +3652,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     <li><code>presetIncludeCore</code>: boolean — include core rules in batch</li>
                     <li><code>presetCount</code>: number — default count for batch presets</li>
                     <li><code>presetTheme</code>: string — one of <code>any</code>, <code>flash</code>, <code>mouse</code>, <code>click</code>, <code>drag</code>, <code>flow</code>, <code>orbit</code>, <code>edge</code>, <code>trail</code>, <code>color</code>, <code>group</code>, <code>speed</code>, <code>templates</code></li>
-                    <li><code>presetBundle</code>: string — one of <code>none</code>, <code>ai-ml-pack</code>, <code>clustering-pack</code>, <code>optimization-pack</code>, <code>graphs-pack</code>, <code>dimensionality-pack</code>, <code>navigation-pack</code>, <code>generative-pack</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
+                    <li><code>presetBundle</code>: string — one of <code>none</code>, <code>ai-ml-pack</code>, <code>nature-pack</code>, <code>clustering-pack</code>, <code>optimization-pack</code>, <code>graphs-pack</code>, <code>dimensionality-pack</code>, <code>navigation-pack</code>, <code>generative-pack</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
                     <li><code>randomPresets</code>: boolean|number — when true/number, loads random presets on start; number picks that many</li>
                 </ul>
                 <h4>Examples</h4>
@@ -3518,6 +3660,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     <li><code>${urlBase}?presetIncludeCore=false&amp;presetTheme=flash&amp;randomPresets=true</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetCount=6&amp;presetTheme=mouse&amp;randomPresets=6</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetBundle=ai-ml-pack</code></li>
+                    <li><code>${urlBase}?presetIncludeCore=true&amp;presetBundle=nature-pack</code></li>
                     <li><code>${urlBase}?presetIncludeCore=false&amp;presetBundle=clustering-pack</code></li>
                     <li><code>${urlBase}?presetBundle=optimization-pack</code></li>
                     <li><code>${urlBase}?debug=true&amp;hue=320&amp;boidCount=300</code></li>
@@ -3853,7 +3996,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             bar.appendChild(label);
             const sel = document.createElement('select'); sel.title = 'Presets (grouped by category)';
             const groups = categorizePresets();
-            const order = ['Core', 'AI / ML / CS', 'Physics', 'Math', 'Nature', 'Visual', 'Templates', 'Other'];
+            const order = ['Core', 'Nature', 'AI / ML / CS', 'Physics', 'Math', 'Visual', 'Templates', 'Other'];
             order.forEach(label => {
                 if (!groups[label] || groups[label].length === 0) return;
                 const og = document.createElement('optgroup'); og.label = label;
@@ -4134,6 +4277,14 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     'ai-epsilon-greedy',
                     'ai-pca-principal-flow',
                     'ai-perceptron-boundary'
+                ],
+                'nature-pack': [
+                    'nature-murmuration-spiral',
+                    'nature-thermal-soaring',
+                    'nature-river-meander',
+                    'nature-phyllotaxis-orbit',
+                    'nature-pollen-drift',
+                    'nature-karman-vortex-street'
                 ],
                 // Smaller thematic bundles
                 'clustering-pack': [
