@@ -308,6 +308,7 @@
             border: none;
             padding: 0;
         }
+        .config-note { color: #aaaaaa; font-size: 12px; margin: 4px 0 8px; font-family: var(--font-mono); }
         /* Config overlay tabs */
         .config-tab-bar { display: flex; gap: 8px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.12); }
         .config-tab {
@@ -3087,6 +3088,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 presetCount: 4,
                 presetTheme: 'any',
                 presetBundle: 'none',
+                configTab: 'settings',
                 ...urlParams
             };
             logConfig('Initial config:', config);
@@ -3415,9 +3417,13 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 rulesWrap.style.display = rulesOn ? 'block' : 'none';
                 btnSettings.classList.toggle('active', !rulesOn);
                 btnRules.classList.toggle('active', rulesOn);
+                config.configTab = rulesOn ? 'rules' : 'settings';
+                if (config.debug) updateAllURLParams(); else updateURL('configTab', config.configTab);
             };
             btnSettings.addEventListener('click', () => showTab('settings'));
             btnRules.addEventListener('click', () => showTab('rules'));
+            // Initialize tab from config
+            if ((config.configTab||'settings') === 'rules') showTab('rules');
             const closeBtn = document.createElement('button');
             closeBtn.className = 'close-button';
             closeBtn.innerHTML = '&times;';
@@ -3488,11 +3494,11 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                  createSlider(`${fn.name}Weight`, `${labelName} Weight`, 0, 5, 0.1, config[`${fn.name}Weight`]);
             });
 
-            // Rule Presets batch reset
-            const presetsBox = document.createElement('div');
-            presetsBox.className = 'config-item';
-            presetsBox.innerHTML = `
-                <h3>Rule Presets</h3>
+            // Random Presets section
+            const randomBox = document.createElement('div'); randomBox.className='config-item';
+            randomBox.innerHTML = `
+                <h3>Random Presets</h3>
+                <div class="config-note">Randomly selects N presets by the chosen theme and replaces the current rules. Use this for variety.</div>
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                     <label>Count
                         <input type="number" id="preset-count" min="1" max="${Math.max(4, rulePresets.length)}" value="${(config.presetCount ?? 4)}"
@@ -3515,6 +3521,17 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                             <option value="templates">Templates</option>
                         </select>
                     </label>
+                    <label><input type="checkbox" id="preset-include-core" ${config.presetIncludeCore ? 'checked' : ''}> Include core rules</label>
+                    <button id="preset-reset-btn" style="background: var(--primary-color); color: #fff; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono);">Reset with Presets</button>
+                </div>
+            `;
+            appendTarget.appendChild(randomBox);
+            // Bundle section
+            const bundleBox = document.createElement('div'); bundleBox.className='config-item';
+            bundleBox.innerHTML = `
+                <h3>Preset Bundles</h3>
+                <div class="config-note">Loads a curated set of specific presets (order preserved). Use this for repeatable demos.</div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                     <label>Bundle
                         <select id="preset-bundle" style="background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
                             <option value="none">None</option>
@@ -3533,48 +3550,44 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                             <option value="core-plus-flash">Core + Flash</option>
                         </select>
                     </label>
-                    <label><input type="checkbox" id="preset-include-core" ${config.presetIncludeCore ? 'checked' : ''}> Include core rules</label>
-                    <button id="preset-reset-btn" style="background: var(--primary-color); color: #fff; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono);">Reset with Presets</button>
+                    <label><input type="checkbox" id="bundle-include-core" ${config.presetIncludeCore ? 'checked' : ''}> Include core rules</label>
                     <button id="preset-bundle-btn" style="background: transparent; color: #fff; border: 1px solid #555; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono);">Load Bundle</button>
                 </div>
             `;
-            appendTarget.appendChild(presetsBox);
-            const presetBtn = presetsBox.querySelector('#preset-reset-btn');
+            appendTarget.appendChild(bundleBox);
+            // Random listeners
+            const presetBtn = randomBox.querySelector('#preset-reset-btn');
             presetBtn.addEventListener('click', () => {
-                const countEl = presetsBox.querySelector('#preset-count');
-                const includeCoreEl = presetsBox.querySelector('#preset-include-core');
-                const themeEl = presetsBox.querySelector('#preset-theme');
+                const countEl = randomBox.querySelector('#preset-count');
+                const includeCoreEl = randomBox.querySelector('#preset-include-core');
+                const themeEl = randomBox.querySelector('#preset-theme');
                 const n = Math.max(1, Math.min(rulePresets.length, parseInt(countEl.value || '1', 10)));
                 const includeCore = !!includeCoreEl.checked;
                 const themeKey = (themeEl && themeEl.value) || 'any';
-                // Mirror Count into URL immediately on reset click
                 config.presetCount = n;
                 if (config.debug) updateAllURLParams(); else updateURL('presetCount', config.presetCount);
                 resetRulesWithPresets(n, includeCore, themeKey);
             });
-            // Bundle button
-            const bundleBtn = presetsBox.querySelector('#preset-bundle-btn');
+            // Bundle listeners
+            const bundleBtn = bundleBox.querySelector('#preset-bundle-btn');
             if (bundleBtn) {
                 bundleBtn.addEventListener('click', () => {
-                    const bundleEl = presetsBox.querySelector('#preset-bundle');
-                    const includeCoreEl = presetsBox.querySelector('#preset-include-core');
+                    const bundleEl = bundleBox.querySelector('#preset-bundle');
+                    const includeCoreEl = bundleBox.querySelector('#bundle-include-core');
                     const bundle = (bundleEl && bundleEl.value) || 'none';
                     if (bundle && bundle !== 'none') {
                         loadPresetBundle(bundle, !!includeCoreEl.checked);
                     }
                 });
             }
-            // Persist "Include core rules" toggle in URL
-            const includeCoreEl = presetsBox.querySelector('#preset-include-core');
-            if (includeCoreEl) {
-                includeCoreEl.checked = !!config.presetIncludeCore;
-                includeCoreEl.addEventListener('change', e => {
-                    config.presetIncludeCore = !!e.target.checked;
-                    if (config.debug) updateAllURLParams(); else updateURL('presetIncludeCore', config.presetIncludeCore);
-                });
-            }
+            // Persist include-core (sync both checkboxes)
+            const includeCoreEl1 = randomBox.querySelector('#preset-include-core');
+            const includeCoreEl2 = bundleBox.querySelector('#bundle-include-core');
+            function syncIncludeCore(val){ if (includeCoreEl1) includeCoreEl1.checked = val; if (includeCoreEl2) includeCoreEl2.checked = val; }
+            if (includeCoreEl1) includeCoreEl1.addEventListener('change', e => { config.presetIncludeCore = !!e.target.checked; syncIncludeCore(config.presetIncludeCore); if (config.debug) updateAllURLParams(); else updateURL('presetIncludeCore', config.presetIncludeCore); });
+            if (includeCoreEl2) includeCoreEl2.addEventListener('change', e => { config.presetIncludeCore = !!e.target.checked; syncIncludeCore(config.presetIncludeCore); if (config.debug) updateAllURLParams(); else updateURL('presetIncludeCore', config.presetIncludeCore); });
             // Persist preset count to URL
-            const countEl = presetsBox.querySelector('#preset-count');
+            const countEl = randomBox.querySelector('#preset-count');
             if (countEl) {
                 countEl.value = String(config.presetCount ?? 4);
                 countEl.addEventListener('change', e => {
@@ -3585,7 +3598,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 });
             }
             // Set and persist theme to URL
-            const themeEl = presetsBox.querySelector('#preset-theme');
+            const themeEl = randomBox.querySelector('#preset-theme');
             if (themeEl) {
                 themeEl.value = (config.presetTheme || 'any');
                 themeEl.addEventListener('change', e => {
@@ -3594,7 +3607,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 });
             }
             // Set and persist bundle to URL
-            const bundleEl = presetsBox.querySelector('#preset-bundle');
+            const bundleEl = bundleBox.querySelector('#preset-bundle');
             if (bundleEl) {
                 bundleEl.value = (config.presetBundle || 'none');
                 bundleEl.addEventListener('change', e => {

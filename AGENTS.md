@@ -92,3 +92,4 @@
  - Codex CLI Agent — signed on 2025-08-29, added Rules tab in Config overlay with grouped checklist and Apply Selection.
  - Codex CLI Agent — signed on 2025-08-29, enhanced Rules tab with search/filter and per‑group Select/None actions.
  - Codex CLI Agent — signed on 2025-08-29, styled Settings/Rules buttons into tabs in the Config overlay.
+ - Codex CLI Agent — signed on 2025-08-29, added notes clarifying difference between Random Presets and Preset Bundles.
