@@ -105,3 +105,6 @@ yes please
 ==== 2025-08-28T14:18:00Z Prompt Start ====
 sometimes when a rule refreshes, the simulation crashes and doesn't recover.  let's add a manual "reset" button with the overlay buttons, and let's try to handle code refreshes more gracefully
 ==== Prompt End ====
+==== 2025-08-28T14:24:00Z Prompt Start ====
+Let's show an indicator when we are using fallback code for a rule
+==== Prompt End ====

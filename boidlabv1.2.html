@@ -195,6 +195,19 @@
             background-color: var(--background-color);
             border-bottom-color: var(--primary-color);
         }
+        /* Indicator when a rule is using fallback due to recent runtime errors */
+        .tab-button.fallback-active { position: relative; }
+        .tab-button.fallback-active::after {
+            content: '';
+            position: absolute;
+            top: 6px;
+            right: 8px;
+            width: 8px;
+            height: 8px;
+            background: #ff4d4f; /* subtle red dot */
+            border-radius: 50%;
+            box-shadow: 0 0 0 2px rgba(0,0,0,0.3);
+        }
         @keyframes flash-success {
             50% { background-color: hsl(var(--hue), 100%, 30%); }
         }
@@ -965,6 +978,26 @@ return mouseForce;`
             Object.values(editors).forEach(editor => editor.refresh());
         }
 
+        // Throttled UI indicator for rule fallback activity
+        let _ruleStatusUITs = 0;
+        function updateRuleStatusUI(force = false) {
+            const now = performance.now();
+            if (!force && now - _ruleStatusUITs < 200) return;
+            _ruleStatusUITs = now;
+            userFunctions.forEach(fn => {
+                const active = !!(fn._fallbackUntil && now < fn._fallbackUntil);
+                const tab = document.querySelector(`.tab-button[data-tab="${fn.name}"]`);
+                if (tab) {
+                    tab.classList.toggle('fallback-active', active);
+                    if (active) {
+                        tab.dataset.tip = `Fallback active for ${fn.name}`;
+                    } else {
+                        delete tab.dataset.tip;
+                    }
+                }
+            });
+        }
+
         function setupConfigUI() {
             const container = document.getElementById('config-overlay');
             container.innerHTML = '<h2>Configuration</h2>';
@@ -1196,10 +1229,14 @@ return mouseForce;`
                                 const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector);
                                 return out instanceof Vector ? out : new Vector();
                             } catch (e) {
-                                if (!fn._lastRuntimeErrorTs || (performance.now() - fn._lastRuntimeErrorTs) > 1000) {
+                                const now = performance.now();
+                                if (!fn._lastRuntimeErrorTs || (now - fn._lastRuntimeErrorTs) > 1000) {
                                     console.error(`Runtime error in rule '${fn.name}':`, e);
-                                    fn._lastRuntimeErrorTs = performance.now();
+                                    fn._lastRuntimeErrorTs = now;
                                 }
+                                // Mark fallback active for a short window and update UI (throttled)
+                                fn._fallbackUntil = now + 2000;
+                                updateRuleStatusUI();
                                 return new Vector();
                             }
                         };
@@ -1214,6 +1251,9 @@ return mouseForce;`
                         console.error(`Error reloading rule '${fn.name}':`, e);
                         // Keep previous good function if any; else use no-op
                         fn.updateBoid = typeof fn.updateBoid === 'function' ? fn.updateBoid : () => new Vector();
+                        // Also mark fallback indicator briefly to signal error state
+                        fn._fallbackUntil = performance.now() + 2000;
+                        updateRuleStatusUI();
                         if (tabButton) {
                            tabButton.classList.add('reloaded-error');
                            setTimeout(() => tabButton.classList.remove('reloaded-error'), 600);
@@ -1327,6 +1367,8 @@ return mouseForce;`
                 charts.fpsChart.data.datasets[0].data = fpsHistory;
                 charts.fpsChart.update('none');
             }
+            // Update rule fallback indicators (throttled)
+            updateRuleStatusUI();
             document.getElementById('particle-count').textContent = Math.round(config.boidCount);
             if (isFinite(updateTime)) {
                 document.getElementById('update-time').textContent = updateTime.toFixed(2);
