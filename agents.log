@@ -162,3 +162,5 @@ add some more flashy presets that create drawables, but don't create them on eve
 yes please. add themed batches.
 write some more interesting rules, add some more preset themes, and have some premade bundles of interesting presets you think would go well together.
 let's make the code pane resizeable when docked on the left.  Let's make the left dock the default
+yes please.  Also, let's show the editor with the new rule when we create a new rule
+when I select a preset and click "new", use that as the new preset
