@@ -3950,10 +3950,23 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     const active = document.querySelector('.tab-button.active');
                     const activeName = active && active.dataset.tab;
                     const present = new Set((userFunctions||[]).map(u => u.name));
+                    // Attempt to resolve the active preset by sanitized name
+                    let activePreset = null;
+                    try {
+                        const sname = typeof sanitizeRuleName === 'function' ? activeName : activeName;
+                        activePreset = (rulePresets||[]).find(p => {
+                            const sn = (typeof sanitizeRuleName === 'function') ? sanitizeRuleName(p.name||'') : (p.name||'').toLowerCase();
+                            return sn === sname;
+                        }) || null;
+                    } catch(e) { /* noop */ }
                     document.querySelectorAll('#novel-config-sections [data-novel]').forEach(sec => {
-                        const id = sec.dataset.novel;
-                        // show only if the matching rule is present and is the active tab
-                        const shouldShow = !!(activeName && id === activeName && present.has(activeName));
+                        const key = sec.dataset.novel;
+                        // Show if: active tab exists, rule is present, and panel key matches either
+                        // the active tab name, or its preset id, or the sanitized preset name.
+                        const matchId = activePreset && activePreset.id;
+                        const matchName = activeName;
+                        const matchSan = activePreset ? (typeof sanitizeRuleName === 'function' ? sanitizeRuleName(activePreset.name||'') : (activePreset.name||'').toLowerCase()) : null;
+                        const shouldShow = !!(activeName && present.has(activeName) && (key === matchName || (matchId && key === matchId) || (matchSan && key === matchSan)));
                         sec.style.display = shouldShow ? '' : 'none';
                     });
                 } catch(e){}
