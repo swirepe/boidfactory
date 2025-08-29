@@ -2967,6 +2967,42 @@ const desired=pd.mult(boid.maxSpeed*0.9);
 if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x-ex*12, y-ey*12); ctx.lineTo(x+ex*12, y+ey*12); ctx.strokeStyle='hsla(' + (((config.hue+200)%360)) + ',100%,70%,0.22)'; ctx.stroke(); }); }
 return Vector.sub(desired,boid.vel).limit(boid.maxForce);` },
 
+          { id: 'ml-kmeans-colorize', name: 'ML — K-Means Colorize (Online)', code: `/**
+  K-Means Colorize (Online)
+  Maintains K moving centroids (online update). Each boid is assigned to the nearest
+  centroid; the boid's hue is set by its cluster, and the centroid drifts toward the
+  boid (streaming K-means). Optionally adds a slight cohesion toward the centroid.
+
+  Visuals:
+  - Centroid markers (colored by cluster hue)
+  - Faint line from boid to its centroid (occasional, to avoid clutter)
+  @returns {Vector}
+*/
+// Initialize shared state
+if (!gameState._kmeans) {
+  const K = 5;
+  const centers = [];
+  for (let i=0;i<K;i++) centers.push(new Vector(Math.random()*gameState.width, Math.random()*gameState.height));
+  const hues = []; const base=(config.hue||200); for (let i=0;i<K;i++) hues.push((base + Math.round(i*360/K)) % 360);
+  gameState._kmeans = { K, centers, hues, alpha: 0.05 };
+}
+const km = gameState._kmeans;
+// Assign to nearest centroid
+let cid = 0; let bestD2 = Infinity;
+for (let i=0;i<km.K;i++) { const c = km.centers[i]; const dx = c.x - boid.pos.x, dy = c.y - boid.pos.y; const d2 = dx*dx + dy*dy; if (d2 < bestD2) { bestD2 = d2; cid = i; } }
+// Online centroid update (move a little toward the boid)
+const c = km.centers[cid]; c.x = c.x * (1 - km.alpha) + boid.pos.x * km.alpha; c.y = c.y * (1 - km.alpha) + boid.pos.y * km.alpha;
+// Colorize boid by cluster hue
+boid.hue = km.hues[cid];
+// Mild cohesion toward centroid
+const desired = Vector.sub(c, boid.pos).normalize().mult(boid.maxSpeed * 0.35);
+// Visuals
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  if (Math.random() < 0.12) { const x=boid.pos.x,y=boid.pos.y; const cx=c.x, cy=c.y; const hue = km.hues[cid]; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(cx,cy); ctx.strokeStyle='hsla(' + (hue) + ',100%,70%,0.14)'; ctx.lineWidth=1; ctx.stroke(); }); }
+  if (Math.random() < 0.05) { const hue = km.hues[cid]; const cx=c.x, cy=c.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(cx,cy,6,0,Math.PI*2); ctx.strokeStyle='hsla(' + (hue) + ',100%,70%,0.22)'; ctx.lineWidth=1; ctx.stroke(); }); }
+}
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.6);` },
+
           { id: 'ai-transformer-attention', name: 'AI — Transformer Self-Attention', code: `/**
   Transformer Self-Attention (Single-Head)
   Compute attention weights over neighbors based on velocity similarity (cosine).
