@@ -1991,6 +1991,43 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
         }
 
+        function addRuleWithPreset(preset) {
+            if (!preset) return;
+            addRule(preset.name);
+            const name = sanitizeRuleName(preset.name);
+            const ed = editors[name];
+            if (ed) ed.setValue(preset.code);
+        }
+
+        function resetRulesWithPresets(n, includeCore) {
+            const coreIds = new Set(['cohesion-core','alignment-core','separation-core','novel-core']);
+            const pool = rulePresets.filter(p => includeCore || !coreIds.has(p.id));
+            if (pool.length === 0) return;
+            // Randomize pool
+            const arr = pool.slice();
+            for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
+            const pick = arr.slice(0, Math.max(1, Math.min(n, arr.length)));
+            // Keep or create one base rule, then replace it and delete others
+            if (userFunctions.length === 0) {
+                addRuleWithPreset(pick[0]);
+            } else {
+                // Fill first existing with first preset and rename
+                const first = userFunctions[0].name;
+                const ed = editors[first];
+                if (ed) ed.setValue(pick[0].code);
+                const targetName = sanitizeRuleName(pick[0].name);
+                if (first !== targetName) renameRule(first, targetName);
+                // Delete all others
+                const others = userFunctions.slice(1).map(u => u.name);
+                others.forEach(nm => deleteRule(nm));
+            }
+            // Add remaining selections
+            for (let i = 1; i < pick.length; i++) addRuleWithPreset(pick[i]);
+            // Rebuild UI bits
+            if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
+            setupConfigUI();
+        }
+
         function deleteRule(name) {
             if (!editors[name]) return;
             // Remove from userFunctions
