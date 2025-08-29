@@ -308,6 +308,27 @@
             border: none;
             padding: 0;
         }
+        /* Config overlay tabs */
+        .config-tab-bar { display: flex; gap: 8px; margin-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+        .config-tab {
+            background: transparent;
+            border: 1px solid rgba(255,255,255,0.15);
+            border-bottom: none;
+            color: #ddd;
+            padding: 6px 10px;
+            border-radius: 6px 6px 0 0;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            opacity: 0.85;
+        }
+        .config-tab:hover { opacity: 1; color: var(--primary-color); border-color: var(--primary-color); }
+        .config-tab.active {
+            background: rgba(255,255,255,0.06);
+            color: var(--primary-color);
+            border-color: var(--primary-color);
+            border-bottom: 1px solid var(--overlay-bg-color);
+        }
         h2, h3 {
             color: var(--primary-color);
             margin-top: 0;
@@ -3374,6 +3395,29 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         function setupConfigUI() {
             const container = document.getElementById('config-overlay');
             container.innerHTML = '<h2>Configuration</h2>';
+            // Simple tab bar for Settings and Rules
+            const tabbar = document.createElement('div');
+            tabbar.className = 'config-tab-bar';
+            const btnSettings = document.createElement('button'); btnSettings.textContent = 'Settings'; btnSettings.className = 'config-tab active';
+            const btnRules = document.createElement('button'); btnRules.textContent = 'Rules'; btnRules.className = 'config-tab';
+            tabbar.appendChild(btnSettings); tabbar.appendChild(btnRules);
+            container.appendChild(tabbar);
+            // Wrappers for each tab
+            const settingsWrap = document.createElement('div'); settingsWrap.id = 'config-settings-tab';
+            const rulesWrap = document.createElement('div'); rulesWrap.id = 'config-rules-tab'; rulesWrap.style.display = 'none';
+            container.appendChild(settingsWrap);
+            container.appendChild(rulesWrap);
+            const appendTarget = settingsWrap;
+            // Tab switching
+            const showTab = (which) => {
+                const rulesOn = which === 'rules';
+                settingsWrap.style.display = rulesOn ? 'none' : 'block';
+                rulesWrap.style.display = rulesOn ? 'block' : 'none';
+                btnSettings.classList.toggle('active', !rulesOn);
+                btnRules.classList.toggle('active', rulesOn);
+            };
+            btnSettings.addEventListener('click', () => showTab('settings'));
+            btnRules.addEventListener('click', () => showTab('rules'));
             const closeBtn = document.createElement('button');
             closeBtn.className = 'close-button';
             closeBtn.innerHTML = '&times;';
@@ -3406,7 +3450,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 });
                 item.appendChild(input);
                 item.querySelector('label').appendChild(valueSpan);
-                container.appendChild(item);
+                appendTarget.appendChild(item);
             };
 
             const createSelect = (id, label, options, value) => {
@@ -3427,7 +3471,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     if (config.debug) updateAllURLParams(); else updateURL(id, e.target.value);
                 });
                 item.appendChild(select);
-                container.appendChild(item);
+                appendTarget.appendChild(item);
             };
 
             createSlider('boidCount', 'Boid Count', 10, 1000, 10, config.boidCount);
@@ -3494,7 +3538,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     <button id="preset-bundle-btn" style="background: transparent; color: #fff; border: 1px solid #555; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono);">Load Bundle</button>
                 </div>
             `;
-            container.appendChild(presetsBox);
+            appendTarget.appendChild(presetsBox);
             const presetBtn = presetsBox.querySelector('#preset-reset-btn');
             presetBtn.addEventListener('click', () => {
                 const countEl = presetsBox.querySelector('#preset-count');
@@ -3567,7 +3611,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     logConfig(`${id} changed to ${config[id]}`);
                     if (config.debug) updateAllURLParams(); else updateURL(id, config[id]);
                 });
-                container.appendChild(item);
+                appendTarget.appendChild(item);
             };
             createToggle('visualizeQuadtree', 'Show Quadtree', config.visualizeQuadtree);
             createToggle('debug', 'Debug Mode', config.debug);
@@ -3581,7 +3625,76 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 document.documentElement.style.setProperty('--hue', config.hue);
                 if (config.debug) updateAllURLParams(); else updateURL('hue', config.hue);
             });
-            container.appendChild(colorItem);
+            appendTarget.appendChild(colorItem);
+            // --- Rules tab content ---
+            // Grouped checklist of all presets, with apply controls
+            rulesWrap.innerHTML = '';
+            const rulesHeader = document.createElement('h3'); rulesHeader.textContent = 'Select Rules'; rulesWrap.appendChild(rulesHeader);
+            // Search/filter input
+            const searchRow = document.createElement('div'); searchRow.style.display='flex'; searchRow.style.gap='8px'; searchRow.style.marginBottom='6px';
+            searchRow.innerHTML = `<input id="rules-search" type="text" placeholder="Search rules…" style="flex:1;background:#222;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 8px;font-family:var(--font-mono);font-size:12px;">`;
+            rulesWrap.appendChild(searchRow);
+            const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px'; actions.style.alignItems='center'; actions.style.flexWrap='wrap';
+            actions.innerHTML = `
+                <label><input type="checkbox" id="rules-include-core" ${config.presetIncludeCore ? 'checked' : ''}> Include core rules</label>
+                <button id="rules-select-all" class="bar-btn">Select All</button>
+                <button id="rules-clear-all" class="bar-btn">Clear</button>
+                <button id="rules-apply" class="bar-btn" style="background: var(--primary-color); color: #fff; border: none;">Apply Selection</button>
+            `;
+            rulesWrap.appendChild(actions);
+            const listHost = document.createElement('div'); listHost.style.display = 'grid'; listHost.style.gridTemplateColumns = 'repeat(auto-fit, minmax(240px, 1fr))'; listHost.style.gap='6px 12px'; rulesWrap.appendChild(listHost);
+            const groups = categorizePresets();
+            Object.keys(groups).forEach(group => {
+                const box = document.createElement('div'); box.style.border='1px solid rgba(255,255,255,0.12)'; box.style.borderRadius='6px'; box.style.padding='6px 8px'; box.dataset.group='rules-box';
+                // Group header with per-group actions
+                const header = document.createElement('div'); header.style.display='flex'; header.style.alignItems='center'; header.style.gap='8px'; header.style.marginBottom='4px';
+                const title = document.createElement('span'); title.textContent = group; title.style.color='var(--secondary-color)'; title.style.fontFamily='var(--font-mono)'; header.appendChild(title);
+                const btnAll = document.createElement('button'); btnAll.className='bar-btn'; btnAll.textContent='All'; btnAll.title='Select all in group'; header.appendChild(btnAll);
+                const btnNone = document.createElement('button'); btnNone.className='bar-btn'; btnNone.textContent='None'; btnNone.title='Clear group'; header.appendChild(btnNone);
+                box.appendChild(header);
+                groups[group].forEach(p => {
+                    const id = `rules-${p.id}`;
+                    const label = document.createElement('label'); label.style.display='flex'; label.style.alignItems='center'; label.style.gap='6px'; label.style.fontSize='12px'; label.style.cursor='pointer'; label.dataset.preset='1'; label.dataset.name=(p.name||'').toLowerCase();
+                    const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p.id; cb.dataset.preset='1'; cb.id=id;
+                    label.appendChild(cb);
+                    const span = document.createElement('span'); span.textContent = p.name; label.appendChild(span);
+                    box.appendChild(label);
+                });
+                // Per-group listeners
+                btnAll.addEventListener('click', () => { box.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => { if (cb.offsetParent !== null) cb.checked = true; }); });
+                btnNone.addEventListener('click', () => { box.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => { if (cb.offsetParent !== null) cb.checked = false; }); });
+                listHost.appendChild(box);
+            });
+            // Search filtering
+            const searchInput = rulesWrap.querySelector('#rules-search');
+            const filterRules = (q) => {
+                const qq = (q||'').toLowerCase();
+                const boxes = Array.from(listHost.querySelectorAll('[data-group="rules-box"]'));
+                boxes.forEach(box => {
+                    let visibleCount = 0;
+                    box.querySelectorAll('label[data-preset]').forEach(label => {
+                        const nm = label.dataset.name || '';
+                        const show = !qq || nm.includes(qq);
+                        label.style.display = show ? '' : 'none';
+                        if (show) visibleCount++;
+                    });
+                    box.style.display = visibleCount ? '' : 'none';
+                });
+            };
+            const debounceFilter = debounce(() => filterRules(searchInput.value), 120);
+            searchInput.addEventListener('input', debounceFilter);
+            // Rules tab actions
+            rulesWrap.querySelector('#rules-select-all').addEventListener('click', () => {
+                rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => cb.checked = true);
+            });
+            rulesWrap.querySelector('#rules-clear-all').addEventListener('click', () => {
+                rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => cb.checked = false);
+            });
+            rulesWrap.querySelector('#rules-apply').addEventListener('click', () => {
+                const ids = Array.from(rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]:checked')).map(el => el.value);
+                const includeCore = !!rulesWrap.querySelector('#rules-include-core')?.checked;
+                applyPresetSelection(ids, includeCore);
+            });
         }
         
         function setupStatsUI() {
@@ -4332,6 +4445,29 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 const p = presetById[id];
                 if (p) selected.push(p);
             }
+            if (selected.length === 0) return;
+            if (userFunctions.length === 0) {
+                addRuleWithPreset(selected[0]);
+            } else {
+                const first = userFunctions[0].name;
+                const ed = editors[first]; if (ed) ed.setValue(selected[0].code);
+                if (first !== sanitizeRuleName(selected[0].name)) renameRule(first, selected[0].name);
+                const others = userFunctions.slice(1).map(u => u.name);
+                others.forEach(nm => deleteRule(nm));
+            }
+            for (let i = 1; i < selected.length; i++) addRuleWithPreset(selected[i]);
+            if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
+            setupConfigUI();
+        }
+
+        function applyPresetSelection(ids, includeCore) {
+            if (!Array.isArray(ids)) return;
+            const coreIds = new Set(['cohesion-core','alignment-core','separation-core','novel-core']);
+            const corePresets = rulePresets.filter(p => coreIds.has(p.id));
+            const presetById = Object.fromEntries(rulePresets.map(p => [p.id, p]));
+            const selected = [];
+            if (includeCore) selected.push(...corePresets);
+            ids.forEach(id => { const p = presetById[id]; if (p) selected.push(p); });
             if (selected.length === 0) return;
             if (userFunctions.length === 0) {
                 addRuleWithPreset(selected[0]);

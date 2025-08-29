@@ -89,3 +89,6 @@
  - Codex CLI Agent — signed on 2025-08-29, curated small themed bundles: clustering, optimization, graphs, dimensionality, navigation, and generative.
  - Codex CLI Agent — signed on 2025-08-29, added 10 nature-inspired presets with beautiful visuals and promoted Nature category in the preset list.
  - Codex CLI Agent — signed on 2025-08-29, added Nature Pack bundle (presetBundle=nature-pack).
+ - Codex CLI Agent — signed on 2025-08-29, added Rules tab in Config overlay with grouped checklist and Apply Selection.
+ - Codex CLI Agent — signed on 2025-08-29, enhanced Rules tab with search/filter and per‑group Select/None actions.
+ - Codex CLI Agent — signed on 2025-08-29, styled Settings/Rules buttons into tabs in the Config overlay.
