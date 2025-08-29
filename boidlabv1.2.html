@@ -543,6 +543,7 @@
         let fps = 0;
         const fpsHistory = [];
         const updateTimeHistory = [];
+        const drawablesHistory = [];
         const angleHistory = [];
         const MAX_ANGLE_HISTORY = 750;
 
@@ -2561,6 +2562,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                 <p>Update Time: <span id="update-time">0.00</span> ms</p>
                 <p>(Mean: <span id="update-time-mean">0.00</span>, StdDev: <span id="update-time-stddev">0.00</span>)</p>
                 <div><canvas id="update-time-chart" height="80"></canvas></div>
+                <p>Drawables/Frame: <span id="drawables-count">0</span></p>
+                <div><canvas id="drawables-chart" height="80"></canvas></div>
                 <h3>Flock Coherence</h3>
                 <div class="chart-container"><canvas id="polar-spiral-chart"></canvas></div>
                 <h3>Mean Direction</h3>
@@ -2582,6 +2585,12 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
             charts.updateTimeChart = new Chart(document.getElementById('update-time-chart').getContext('2d'), {
                 type: 'line',
                 data: { labels: Array(50).fill(''), datasets: [{ label: 'Update Time (ms)', data: Array(50).fill(0), borderColor: `hsl(${(config.hue + 120) % 360}, 100%, 50%)`, borderWidth: 1, pointRadius: 0, tension: 0.4 }] },
+                options: { scales: { y: { beginAtZero: true } } }
+            });
+
+            charts.drawablesChart = new Chart(document.getElementById('drawables-chart').getContext('2d'), {
+                type: 'line',
+                data: { labels: Array(50).fill(''), datasets: [{ label: 'Drawables / Frame', data: Array(50).fill(0), borderColor: `hsl(${(config.hue + 240) % 360}, 100%, 50%)`, borderWidth: 1, pointRadius: 0, tension: 0.4 }] },
                 options: { scales: { y: { beginAtZero: true } } }
             });
 
@@ -3225,11 +3234,13 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
             createBoids();
             fpsHistory.length = 0;
             updateTimeHistory.length = 0;
+            drawablesHistory.length = 0;
             angleHistory.length = 0;
             lastTime = performance.now();
             // Clear charts if present
             if (charts.fpsChart) { charts.fpsChart.data.datasets[0].data = []; charts.fpsChart.update('none'); }
             if (charts.updateTimeChart) { charts.updateTimeChart.data.datasets[0].data = []; charts.updateTimeChart.update('none'); }
+            if (charts.drawablesChart) { charts.drawablesChart.data.datasets[0].data = []; charts.drawablesChart.update('none'); }
             if (charts.polarCtx) {
                 const c = charts.polarCtx.canvas; charts.polarCtx.clearRect(0,0,c.width,c.height);
             }
@@ -3354,6 +3365,16 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                 document.getElementById('update-time-stddev').textContent = stdDev.toFixed(2);
                 charts.updateTimeChart.data.datasets[0].data = updateTimeHistory;
                 charts.updateTimeChart.update('none');
+            }
+            // Drawables per frame
+            const dCount = Array.isArray(drawables) ? drawables.length : 0;
+            const dcEl = document.getElementById('drawables-count');
+            if (dcEl) dcEl.textContent = String(dCount);
+            drawablesHistory.push(dCount);
+            if (drawablesHistory.length > 50) drawablesHistory.shift();
+            if (charts.drawablesChart) {
+                charts.drawablesChart.data.datasets[0].data = drawablesHistory;
+                charts.drawablesChart.update('none');
             }
             if (gameState.boids.length > 0) {
                 const sumVec = new Vector(0, 0);

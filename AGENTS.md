@@ -73,3 +73,4 @@
  - Codex CLI Agent — signed on 2025-08-29, added 30 documented rule presets (nature, AI/ML/CS, physics/math) to boidlabv1.2.html and logged prompts.
  - Codex CLI Agent — signed on 2025-08-29, persisted "Include core rules" to URL and added random presets URL param.
  - Codex CLI Agent — signed on 2025-08-29, added `presetCount` URL param and documented all URL params in Help overlay.
+ - Codex CLI Agent — signed on 2025-08-29, added Drawables/Frame graph to Stats overlay and wired it to per-frame drawables.
