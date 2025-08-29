@@ -69,3 +69,4 @@
  - Codex CLI Agent — signed on 2025-08-28, added fallback indicator on tabs for rules with recent runtime errors.
  - Codex CLI Agent — signed on 2025-08-28, added maximized split view with rule pickers and uniqueness constraint.
  - Codex CLI Agent — signed on 2025-08-28, added split toggle icon (maximized): switches tabs (single) ↔ dropdowns (two editors).
+ - Codex CLI Agent — signed on 2025-08-28, added core rules to preset selector and reformatted all presets with JSDoc-style docs.

@@ -114,3 +114,21 @@ When the code pane is maximized, add a way to view two code editors open side by
 ==== 2025-08-28T14:38:00Z Prompt Start ====
 When the code pane is maximized, add an icon next to the "Dock Bottom" icon.  When that icon is pressed, it toggles between one code editor and two.  When there is one code editor, the content is set by the tabs as usual.  When there are two code editors, the tabs are replaced with dropdowns over the editors.
 ==== Prompt End ====
+==== 2025-08-28T14:44:00Z Prompt Start ====
+what ui polish or layout changes would you suggest for the code editor?
+==== Prompt End ====
+==== 2025-08-28T14:50:00Z Prompt Start ====
+Layout and Density
+
+- Tab row spacing: tighten vertical padding; keep icons right, controls left; ensure wrap on small
+screens.
+- Code pane header: add subtle shadow and 1px bottom border for separation from editors.
+- Editor gutters: slightly darken gutter background; reduce line number gutter width.
+- Split divider: add a drag handle between editors for split-on width ratio (40/60 etc.).
+==== Prompt End ====
+==== 2025-08-28T14:56:00Z Prompt Start ====
+Is there a better place for the preset selector?
+
+Let's add `alignment`, `cohesion`, `separation`, `novel` to the preset selector.
+Let's give all our preset code the same tasteful formatting and documentation that cohesion, separation, alignment, and novel have.
+==== Prompt End ====

@@ -156,6 +156,8 @@
             align-items: center;
             gap: 8px;
             text-align: left;
+            border-bottom: 1px solid rgba(255,255,255,0.12);
+            box-shadow: 0 1px 0 rgba(0,0,0,0.35);
         }
         .code-icon { width: 18px; height: 18px; opacity: 0.9; }
         .code-label { flex: 1; }
@@ -178,11 +180,11 @@
         .dock-btn:hover { opacity: 1; }
         .dock-btn svg { width: 20px; height: 20px; display: block; }
         .dock-btn.active { color: var(--primary-color); opacity: 1; }
-        .code-tabs { display: flex; align-items: center; gap: 6px; padding: 0 6px; flex-shrink: 0; }
+        .code-tabs { display: flex; align-items: center; gap: 6px; padding: 2px 6px; flex-shrink: 0; flex-wrap: wrap; row-gap: 4px; }
         .code-tabs .dock-controls { margin-left: auto; }
         .tab-button {
             flex-grow: 1;
-            padding: 10px;
+            padding: 6px 8px;
             cursor: pointer;
             background-color: #333;
             border: none;
@@ -232,8 +234,11 @@
         .split-controls label { font-family: var(--font-mono); font-size: 12px; color: #ddd; }
         .split-controls select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; }
         .split-view { display: none; }
-        #code-pane.maximized.split-on .split-view { display: flex; gap: 8px; }
-        .split-pane { flex: 1; min-width: 0; padding: 6px; box-sizing: border-box; }
+        #code-pane.maximized.split-on .split-view { display: flex; gap: 0; align-items: stretch; }
+        .split-pane { flex: 1 1 50%; min-width: 0; padding: 6px; box-sizing: border-box; }
+        .split-sash { width: 8px; cursor: col-resize; background: transparent; position: relative; z-index: 1; }
+        .split-sash::before { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: rgba(255,255,255,0.08); }
+        .split-sash:hover::before { background: rgba(255,255,255,0.18); }
         /* Hide tabs when in split mode, but keep row for dock icons */
         #code-pane.maximized.split-on .tab-button { display: none; }
         /* Show split toggle icon only in maximized mode */
@@ -247,6 +252,13 @@
         .rule-actions { display: inline-flex; gap: 6px; }
         .rule-btn { background: transparent; border: none; color: rgba(255,255,255,0.8); width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0.8; }
         .rule-btn:hover { opacity: 1; color: var(--primary-color); }
+        .preset-controls { display: inline-flex; gap: 6px; align-items: center; }
+        .preset-controls select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; }
+        /* Per-editor mini task bar */
+        .editor-bar { display: flex; align-items: center; gap: 8px; padding: 6px; background: rgba(0,0,0,0.15); border: 1px solid rgba(255,255,255,0.08); border-radius: 6px; margin-bottom: 6px; }
+        .editor-bar select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; }
+        .editor-bar .bar-btn { background: transparent; border: 1px solid rgba(255,255,255,0.15); color: #ddd; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); font-size: 12px; opacity: 0.85; }
+        .editor-bar .bar-btn:hover { opacity: 1; color: var(--primary-color); border-color: var(--primary-color); }
         .split-picker select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; }
         .split-picker.split-left { justify-self: start; }
         .split-picker.split-right { justify-self: end; }
@@ -255,6 +267,10 @@
         #code-pane.dock-bottom.visible .CodeMirror { height: calc(40vh - 92px) !important; }
         #code-pane.dock-left .CodeMirror { height: calc(100vh - 92px) !important; }
         #code-pane.maximized .CodeMirror { height: calc(100vh - 92px) !important; }
+        /* Editor gutter tweaks */
+        .CodeMirror-gutters { background: #2a2a2a !important; border-right: 1px solid #444 !important; }
+        .CodeMirror-linenumbers { min-width: 2.5ch !important; }
+        .CodeMirror-linenumber { padding: 0 6px 0 4px !important; color: #aaa !important; }
         /* Minimized left dock: show only icon in header */
         #code-pane.dock-left:not(.visible) .code-label { display: none; }
         #code-pane.dock-left:not(.visible) .code-tabs { display: none; }
@@ -353,11 +369,6 @@
         <div class="code-tabs">
             <span class="split-picker split-left"><select id="split-left"></select></span>
             <span class="split-picker split-right"><select id="split-right"></select></span>
-            <span class="rule-actions" aria-label="Rule actions">
-                <button class="rule-btn" id="rule-new-btn" title="New rule" aria-label="New rule">＋</button>
-                <button class="rule-btn" id="rule-rename-btn" title="Rename rule" aria-label="Rename rule">✎</button>
-                <button class="rule-btn" id="rule-delete-btn" title="Delete rule" aria-label="Delete rule">🗑</button>
-            </span>
             <button class="tab-button active" data-tab="cohesion">Cohesion</button>
             <button class="tab-button" data-tab="separation">Separation</button>
             <button class="tab-button" data-tab="alignment">Alignment</button>
@@ -392,10 +403,10 @@
                     </svg>
                 </button>
             </span>
-            
         </div>
         <div class="split-view" id="split-view">
             <div class="split-pane" data-slot="left"></div>
+            <div class="split-sash" aria-hidden="true"></div>
             <div class="split-pane" data-slot="right"></div>
         </div>
         <div id="cohesion" class="tab-content active"><textarea></textarea></div>
@@ -845,6 +856,331 @@ if (mouse.down && d < fleeRadius) {
 return mouseForce;`
         };
 
+        // --- RULE PRESETS ---
+        // Tastefully documented presets. Each snippet implements the Rule API and returns a Vector.
+        const rulePresets = [
+          // Core rules
+          { id: 'cohesion-core', name: 'Cohesion (Core)', code: defaultFunctionsCode.cohesion },
+          { id: 'alignment-core', name: 'Alignment (Core)', code: defaultFunctionsCode.alignment },
+          { id: 'separation-core', name: 'Separation (Core)', code: defaultFunctionsCode.separation },
+          { id: 'novel-core', name: 'Novel (Core)', code: defaultFunctionsCode.novel },
+
+          // Presets — styled with JSDoc and succinct guidance
+          { id: 'neighbor-centroid-pull', name: 'Neighbor Centroid Pull', code: `/**
+  Neighbor Centroid Pull
+  Pull gently toward the average neighbor position (soft cohesion)
+  @returns {Vector}
+*/
+const r = config.perceptionRadius;
+let c = new Vector(0, 0), n = 0;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < r) { c.add(o.pos); n++; }
+}
+if (!n) return new Vector();
+c.div(n);
+const desired = Vector.sub(c, boid.pos).normalize().mult(boid.maxSpeed * 0.8);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.8);` },
+
+          { id: 'anti-alignment-swirl', name: 'Anti‑alignment Swirl', code: `/**
+  Anti‑alignment Swirl
+  Nudge against neighbors' mean heading to create swirling patterns
+  @returns {Vector}
+*/
+const r = config.perceptionRadius;
+let v = new Vector(0, 0), n = 0;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < r) { v.add(o.vel); n++; }
+}
+if (!n) return new Vector();
+v.div(n).normalize().mult(boid.maxSpeed);
+const anti = v.mult(-1);
+return Vector.sub(anti, boid.vel).limit(boid.maxForce * 0.6);` },
+
+          { id: 'local-drag', name: 'Local Drag', code: `/**
+  Local Drag
+  Denser regions impose stronger drag (viscous slowdown)
+  @returns {Vector}
+*/
+let density = 0;
+const r = config.perceptionRadius;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < r) density++;
+}
+const drag = Math.min(0.9, density * 0.01);
+const desired = boid.vel.clone().mult(1 - drag);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.4);` },
+
+          { id: 'mouse-vortex', name: 'Mouse Vortex', code: `/**
+  Mouse Vortex
+  Spin around the mouse while pressed (tangential flow)
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const toM = Vector.sub(mp, boid.pos);
+const d = toM.mag(); if (d < 20) return new Vector();
+const tang = new Vector(-toM.y, toM.x).normalize();
+const strength = Math.min(1, 200 / (d + 1));
+const desired = tang.mult(boid.maxSpeed * strength);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'mouse-attract', name: 'Mouse Attract / Repel', code: `/**
+  Mouse Attract / Repel
+  Attract when mouse is down, gently repel otherwise
+  @returns {Vector}
+*/
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+let dir = mouse.down ? Vector.sub(mp, boid.pos) : Vector.sub(boid.pos, mp);
+const d = dir.mag(); if (d === 0) return new Vector();
+dir.normalize();
+const speed = mouse.down ? boid.maxSpeed : boid.maxSpeed * 0.6;
+const desired = dir.mult(speed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'edge-soft-wall', name: 'Edge Soft Wall', code: `/**
+  Edge Soft Wall
+  Apply a soft inward force near boundaries
+  @returns {Vector}
+*/
+const margin = 100;
+let steer = new Vector();
+if (boid.pos.x < margin) steer.x += (margin - boid.pos.x) / margin;
+if (boid.pos.x > gameState.width - margin) steer.x -= (boid.pos.x - (gameState.width - margin)) / margin;
+if (boid.pos.y < margin) steer.y += (margin - boid.pos.y) / margin;
+if (boid.pos.y > gameState.height - margin) steer.y -= (boid.pos.y - (gameState.height - margin)) / margin;
+if (steer.mag() > 0) steer.normalize().mult(boid.maxSpeed * 0.8).sub(boid.vel).limit(boid.maxForce * 0.8);
+return steer;` },
+
+          { id: 'orbital-centroid', name: 'Orbit Centroid', code: `/**
+  Orbit Centroid
+  Circle around neighbors' centroid (tangential flow)
+  @returns {Vector}
+*/
+const r = config.perceptionRadius;
+let c = new Vector(), n = 0;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < r) { c.add(o.pos); n++; }
+}
+if (!n) return new Vector();
+c.div(n);
+const toC = Vector.sub(c, boid.pos);
+if (toC.mag() === 0) return new Vector();
+const tang = new Vector(-toC.y, toC.x).normalize();
+const desired = tang.mult(boid.maxSpeed * 0.9);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.9);` },
+
+          { id: 'jitter', name: 'Subtle Jitter', code: `/**
+  Subtle Jitter
+  Add gentle noise for shimmering, organic motion
+  @returns {Vector}
+*/
+const jitter = Vector.random2D().mult(0.2);
+const desired = boid.vel.clone().add(jitter).normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.3);` },
+
+          { id: 'polarize-hues', name: 'Contrast Neighbor Color', code: `/**
+  Contrast Neighbor Color
+  Drift hue toward complement of neighbors' average hue
+  @returns {Vector}
+*/
+let h = 0, n = 0;
+for (const o of neighbors) { h += o.hue; n++; }
+if (n > 0) {
+  const avg = (h / n) % 360;
+  const contrast = (avg + 180) % 360;
+  const step = 0.5; // deg/frame
+  let delta = (contrast - boid.hue + 540) % 360 - 180;
+  boid.hue = (boid.hue + Math.sign(delta) * Math.min(Math.abs(delta), step) + 360) % 360;
+}
+return new Vector();` },
+
+          { id: 'nearest-three', name: 'Nearest Three Cohesion', code: `/**
+  Nearest Three Cohesion
+  Use the three nearest neighbors to compute centroid
+  @returns {Vector}
+*/
+const r = config.perceptionRadius;
+const arr = [];
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < r) arr.push({ o, d });
+}
+arr.sort((a, b) => a.d - b.d);
+const take = arr.slice(0, 3);
+if (!take.length) return new Vector();
+let c = new Vector();
+for (const t of take) c.add(t.o.pos);
+c.div(take.length);
+const desired = Vector.sub(c, boid.pos).normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'density-separation', name: 'Density Separation', code: `/**
+  Density Separation
+  Activate strong separation only when very crowded
+  @returns {Vector}
+*/
+let close = 0;
+for (const o of neighbors) if (Vector.dist(boid.pos, o.pos) < config.boidSize * 2.2) close++;
+if (close < 3) return new Vector();
+let steer = new Vector();
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < config.boidSize * 2.2) steer.add(Vector.sub(boid.pos, o.pos).normalize().div(d));
+}
+steer.normalize().mult(boid.maxSpeed).sub(boid.vel).limit(boid.maxForce * 1.6);
+return steer;` },
+
+          { id: 'pair-alignment', name: 'Pair Alignment', code: `/**
+  Pair Alignment
+  Align primarily with the single nearest neighbor
+  @returns {Vector}
+*/
+let minD = Infinity, t = null;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < minD) { minD = d; t = o; }
+}
+if (!t) return new Vector();
+const desired = t.vel.clone().normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.8);` },
+
+          { id: 'center-spiral', name: 'Spiral to Center', code: `/**
+  Spiral to Center
+  Create slow spirals toward the canvas center
+  @returns {Vector}
+*/
+const center = new Vector(gameState.width / 2, gameState.height / 2);
+const toC = Vector.sub(center, boid.pos);
+if (toC.mag() === 0) return new Vector();
+const tang = new Vector(-toC.y, toC.x).normalize();
+const desired = tang.mult(boid.maxSpeed * 0.6).add(toC.clone().normalize().mult(boid.maxSpeed * 0.2));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'random-walk', name: 'Random Walk Bias', code: `/**
+  Random Walk Bias
+  Add a slowly changing random heading for variety
+  @returns {Vector}
+*/
+if (!boid._randDir || Math.random() < 0.01) boid._randDir = Vector.random2D();
+const desired = boid._randDir.clone().mult(boid.maxSpeed * 0.7);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.6);` },
+
+          { id: 'mouse-spiral-in', name: 'Mouse Spiral In', code: `/**
+  Mouse Spiral In
+  Spiral inward toward the mouse while pressed
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const toM = Vector.sub(mp, boid.pos);
+const tang = new Vector(-toM.y, toM.x).normalize();
+const desired = tang.mult(boid.maxSpeed * 0.6).add(toM.clone().normalize().mult(boid.maxSpeed * 0.4));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'split-flock', name: 'Split Flock by Hue', code: `/**
+  Split Flock by Hue
+  Flock with similar hue; repel dissimilar neighbors
+  @returns {Vector}
+*/
+let like = new Vector(), unlike = new Vector();
+let ln = 0, un = 0;
+for (const o of neighbors) {
+  const diff = Math.abs(((boid.hue - o.hue + 540) % 360) - 180);
+  if (diff < 40) { like.add(o.pos); ln++; } else { unlike.add(Vector.sub(boid.pos, o.pos).normalize()); un++; }
+}
+let steer = new Vector();
+if (ln) { like.div(ln); steer.add(Vector.sub(like, boid.pos).normalize()); }
+if (un) { steer.add(unlike.div(un)); }
+if (steer.mag() > 0) steer.normalize().mult(boid.maxSpeed).sub(boid.vel).limit(boid.maxForce);
+return steer;` },
+
+          { id: 'velocity-match-mouse', name: 'Velocity Match (Mouse)', code: `/**
+  Velocity Match (Mouse)
+  Align with a rotating tangential vector around the mouse
+  @returns {Vector}
+*/
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const toM = Vector.sub(boid.pos, mp);
+const tang = new Vector(-toM.y, toM.x).normalize();
+const desired = tang.mult(boid.maxSpeed * 0.7);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.8);` },
+
+          { id: 'breathing-speed', name: 'Breathing Speed', code: `/**
+  Breathing Speed
+  Smoothly oscillate target speed over time
+  @returns {Vector}
+*/
+const t = (performance.now() % 4000) / 4000 * 2 * Math.PI;
+const sp = 0.5 + 0.5 * Math.sin(t);
+const desired = boid.vel.clone().normalize().mult(boid.maxSpeed * (0.5 + 0.5 * sp));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.5);` },
+
+          { id: 'size-pressure', name: 'Size by Pressure', code: `/**
+  Size by Pressure
+  Adjust size based on local density (pressure)
+  @returns {Vector}
+*/
+let density = 0;
+for (const o of neighbors) if (Vector.dist(boid.pos, o.pos) < config.perceptionRadius * 0.5) density++;
+const target = 6 + Math.min(10, density * 0.5);
+boid.size += Math.sign(target - boid.size) * 0.2;
+return new Vector();` },
+
+          { id: 'seek-voids', name: 'Seek Voids', code: `/**
+  Seek Voids
+  Move toward least crowded angular sector around the boid
+  @returns {Vector}
+*/
+const sectors = 8;
+const counts = new Array(sectors).fill(0);
+for (const o of neighbors) {
+  const ang = Math.atan2(o.pos.y - boid.pos.y, o.pos.x - boid.pos.x);
+  const i = (Math.floor((ang + Math.PI) / (2 * Math.PI) * sectors)) % sectors;
+  counts[i]++;
+}
+let minI = 0; for (let i = 1; i < sectors; i++) if (counts[i] < counts[minI]) minI = i;
+const ang = (minI / sectors) * 2 * Math.PI - Math.PI;
+const dir = new Vector(Math.cos(ang), Math.sin(ang));
+const desired = dir.mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'pairwise-tether', name: 'Pairwise Tether', code: `/**
+  Pairwise Tether
+  Spring-like attraction to nearest neighbor with rest length
+  @returns {Vector}
+*/
+let minD = Infinity, t = null;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < minD) { minD = d; t = o; }
+}
+if (!t) return new Vector();
+const rest = config.perceptionRadius * 0.4;
+const dir = Vector.sub(t.pos, boid.pos);
+const d = dir.mag(); if (d === 0) return new Vector();
+const k = 0.02; const f = (d - rest) * k;
+const desired = dir.normalize().mult(Math.max(-boid.maxSpeed, Math.min(boid.maxSpeed, f * boid.maxSpeed)));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'orbit-mouse', name: 'Orbit Mouse', code: `/**
+  Orbit Mouse
+  Orbit the mouse at a gentle distance, balancing tangential and radial components
+  @returns {Vector}
+*/
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const toM = Vector.sub(mp, boid.pos);
+const d = toM.mag(); if (d === 0) return new Vector();
+const targetDist = 120;
+const tang = new Vector(-toM.y, toM.x).normalize();
+const radial = (d - targetDist) / targetDist;
+const desired = tang.mult(boid.maxSpeed * 0.7).add(toM.normalize().mult(boid.maxSpeed * 0.3 * (-radial)));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+        ];
+
         // --- INITIALIZATION ---
         
         function init() {
@@ -1265,7 +1601,11 @@ return mouseForce;`
             const originalParents = {};
 
             for (const fn of userFunctions) {
-                const textarea = document.querySelector(`#${fn.name} textarea`);
+                const content = document.getElementById(fn.name);
+                // Build per-editor toolbar
+                const bar = buildEditorBar(fn.name);
+                content.prepend(bar);
+                const textarea = content.querySelector('textarea');
                 textarea.value = defaultFunctionsCode[fn.name];
                 editors[fn.name] = CodeMirror.fromTextArea(textarea, {
                     mode: 'javascript', theme: 'dracula', lineNumbers: true,
@@ -1273,7 +1613,8 @@ return mouseForce;`
                     extraKeys: { 'Ctrl-Space': 'autocomplete' },
                     hintOptions: { hint: ruleHint, completeSingle: false }
                 });
-                originalParents[fn.name] = document.getElementById(fn.name);
+                // Store original parent (code-pane) for returning when exiting split
+                originalParents[fn.name] = document.getElementById(fn.name).parentElement;
 
                 // Live-compile user rule code into a function with a narrow, explicit scope.
                 // Scope parameters available inside the editor code:
@@ -1353,6 +1694,8 @@ return mouseForce;`
             // Split view setup
             const leftSel = document.getElementById('split-left');
             const rightSel = document.getElementById('split-right');
+            const splitView = document.getElementById('split-view');
+            const splitSash = splitView ? splitView.querySelector('.split-sash') : null;
             const slots = {
                 left: document.querySelector('.split-pane[data-slot="left"]'),
                 right: document.querySelector('.split-pane[data-slot="right"]'),
@@ -1379,24 +1722,17 @@ return mouseForce;`
             }
             function unmountRule(rule) {
                 if (!mounted[rule]) return;
-                const slotName = mounted[rule];
-                const wrapper = editors[rule] && editors[rule].getWrapperElement();
-                if (wrapper && originalParents[rule]) {
-                    originalParents[rule].appendChild(wrapper);
-                    editors[rule].refresh();
-                }
+                const content = document.getElementById(rule);
+                const parent = originalParents[rule] || document.getElementById('code-pane');
+                if (content && parent) { parent.appendChild(content); editors[rule].refresh(); }
                 delete mounted[rule];
             }
             function mountRule(rule, slotName) {
                 if (!rule || !slots[slotName]) return;
                 // If this rule is mounted elsewhere, unmount first
                 unmountRule(rule);
-                const wrapper = editors[rule] && editors[rule].getWrapperElement();
-                if (wrapper) {
-                    slots[slotName].appendChild(wrapper);
-                    mounted[rule] = slotName;
-                    editors[rule].refresh();
-                }
+                const content = document.getElementById(rule);
+                if (content) { slots[slotName].appendChild(content); mounted[rule] = slotName; editors[rule].refresh(); }
             }
             function updateSplitMounts() {
                 // Ensure rules are distinct
@@ -1410,12 +1746,52 @@ return mouseForce;`
                 // If a chosen rule is mounted in the wrong place, move it
                 if (mounted[L] !== 'left') mountRule(L, 'left');
                 if (mounted[R] !== 'right') mountRule(R, 'right');
+                applySplitRatio();
             }
             function showSplitUI(show) {
                 const sc = document.getElementById('split-controls');
                 const sv = document.getElementById('split-view');
                 if (sc) sc.style.display = 'none'; // managed in tabs row now
                 if (sv) sv.style.display = show ? 'flex' : 'none';
+            }
+            function applySplitRatio() {
+                if (!slots.left || !slots.right) return;
+                const pct = (typeof config.splitLeftPercent === 'number') ? config.splitLeftPercent : 50;
+                slots.left.style.flex = `0 0 ${pct}%`;
+                slots.right.style.flex = `1 1 auto`;
+            }
+            // Sash drag to set ratio
+            if (splitSash && splitView) {
+                let dragging = false;
+                const onMove = (evt) => {
+                    if (!dragging) return;
+                    const x = evt.touches ? evt.touches[0].clientX : evt.clientX;
+                    const rect = splitView.getBoundingClientRect();
+                    let pct = ((x - rect.left) / rect.width) * 100;
+                    pct = Math.max(20, Math.min(80, pct));
+                    config.splitLeftPercent = pct;
+                    applySplitRatio();
+                };
+                const onUp = () => {
+                    if (!dragging) return;
+                    dragging = false;
+                    document.removeEventListener('mousemove', onMove);
+                    document.removeEventListener('mouseup', onUp);
+                    document.removeEventListener('touchmove', onMove);
+                    document.removeEventListener('touchend', onUp);
+                    if (!config.debug) updateURL('splitLeftPercent', Math.round(config.splitLeftPercent));
+                    refreshEditors();
+                };
+                splitSash.addEventListener('mousedown', () => {
+                    dragging = true;
+                    document.addEventListener('mousemove', onMove);
+                    document.addEventListener('mouseup', onUp);
+                });
+                splitSash.addEventListener('touchstart', () => {
+                    dragging = true;
+                    document.addEventListener('touchmove', onMove, { passive: false });
+                    document.addEventListener('touchend', onUp);
+                }, { passive: true });
             }
             // Expose hooks for dock mode changes
             setupCodePane._split = {
@@ -1439,29 +1815,50 @@ return mouseForce;`
                 if (!config.debug) updateURL('splitRightRule', config.splitRightRule);
                 updateSplitMounts();
             });
+            // Per-editor toolbars manage presets and actions
             // Reflect initial split toggle state when first applied to maximized
             updateSplitModeUI();
+            // Global new rule button moved to per-editor bars; expose helper if needed
+        }
 
-            // Rule actions
-            document.getElementById('rule-new-btn').addEventListener('click', () => {
-                const name = prompt('New rule name (letters, numbers, _-):', 'custom');
-                if (!name) return;
-                addRule(name);
+        function buildEditorBar(ruleName) {
+            const bar = document.createElement('div'); bar.className = 'editor-bar';
+            // Preset select
+            const sel = document.createElement('select');
+            rulePresets.forEach((p, idx) => { const o=document.createElement('option'); o.value=p.id; o.textContent=p.name; if(idx===0) o.selected=true; sel.appendChild(o); });
+            bar.appendChild(sel);
+            // Fill button
+            const fill = document.createElement('button'); fill.className='bar-btn'; fill.title='Fill with preset'; fill.textContent='Fill';
+            fill.addEventListener('click', () => {
+                const p = rulePresets.find(x => x.id === sel.value) || rulePresets[0];
+                const ed = editors[ruleName]; if (ed && p) ed.setValue(p.code);
+                // If rule is still custom, rename to preset name
+                if (/^custom(\-\d+)?$/.test(ruleName)) {
+                    const newName = sanitizeRuleName(p.name);
+                    renameRule(ruleName, newName);
+                }
             });
-            document.getElementById('rule-rename-btn').addEventListener('click', () => {
-                const current = getCurrentRuleTarget();
-                if (!current) return;
-                const newName = prompt(`Rename rule '${current}' to:`, current);
-                if (!newName || newName === current) return;
-                renameRule(current, newName);
+            bar.appendChild(fill);
+            // Rename button
+            const ren = document.createElement('button'); ren.className='bar-btn'; ren.title='Rename rule'; ren.textContent='Rename';
+            ren.addEventListener('click', () => {
+                const newName = prompt(`Rename rule '${ruleName}' to:`, ruleName);
+                if (newName && newName !== ruleName) renameRule(ruleName, newName);
             });
-            document.getElementById('rule-delete-btn').addEventListener('click', () => {
-                const target = getCurrentRuleTarget();
-                if (!target) return;
+            bar.appendChild(ren);
+            // Delete button
+            const del = document.createElement('button'); del.className='bar-btn'; del.title='Delete rule'; del.textContent='Delete';
+            del.addEventListener('click', () => {
                 if (userFunctions.length <= 1) { alert('At least one rule is required.'); return; }
-                if (!confirm(`Delete rule '${target}'? This cannot be undone.`)) return;
-                deleteRule(target);
+                if (!confirm(`Delete rule '${ruleName}'? This cannot be undone.`)) return;
+                deleteRule(ruleName);
             });
+            bar.appendChild(del);
+            // New rule button (local convenience)
+            const add = document.createElement('button'); add.className='bar-btn'; add.title='New rule'; add.textContent='New';
+            add.addEventListener('click', () => addRule('custom'));
+            bar.appendChild(add);
+            return bar;
         }
 
         function sanitizeRuleName(name) {
@@ -1473,12 +1870,17 @@ return mouseForce;`
             return s;
         }
 
-        function defaultRuleTemplate(name) {
-            return `/**\n * ${name}: custom rule template\n * @param {Boid} boid\n * @param {GameState} gameState\n * @param {Boid[]} neighbors\n * @param {Config} config\n * @param {Mouse} mouse\n * @param {typeof Vector} Vector\n * @returns {Vector}\n */\nconst steering = new Vector(0, 0);\n// Example: mild drift toward mouse when down\nif (mouse.down) {\n  const desired = Vector.sub(new Vector(mouse.pos.x, mouse.pos.y), boid.pos).normalize().mult(boid.maxSpeed * 0.2);\n  return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.2);\n}\nreturn steering;`;
+        function defaultRuleTemplate() {
+            // Rotate through presets for variety
+            if (typeof config._nextPresetIdx !== 'number') config._nextPresetIdx = 0;
+            const preset = rulePresets[config._nextPresetIdx % rulePresets.length];
+            config._nextPresetIdx++;
+            return preset ? preset.code : `return new Vector();`;
         }
 
         function addRule(nameRaw) {
-            const name = sanitizeRuleName(nameRaw);
+            const base = /^custom(\-\d+)?$/.test(nameRaw) ? nameRaw : 'custom';
+            const name = sanitizeRuleName(base);
             if (userFunctions.find(u => u.name === name)) { alert('Rule already exists.'); return; }
             // Create tab and content
             const tabsBar = document.querySelector('.code-tabs');
@@ -1486,6 +1888,8 @@ return mouseForce;`
             tabBtn.className = 'tab-button'; tabBtn.dataset.tab = name; tabBtn.textContent = name.charAt(0).toUpperCase() + name.slice(1);
             tabsBar.insertBefore(tabBtn, tabsBar.querySelector('.dock-controls'));
             const content = document.createElement('div'); content.id = name; content.className = 'tab-content';
+            // Per-editor toolbar
+            const bar = buildEditorBar(name); content.appendChild(bar);
             const ta = document.createElement('textarea'); content.appendChild(ta);
             document.getElementById('code-pane').appendChild(content);
             // Editor
@@ -1500,8 +1904,8 @@ return mouseForce;`
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tabBtn.classList.add('active'); content.classList.add('active'); ed.refresh();
             });
-            // Set default code and compile
-            ed.setValue(defaultRuleTemplate(name));
+            // Set default code (preset) and compile
+            ed.setValue(defaultRuleTemplate());
             const updateFunction = debounce((editor) => {
                 const tabButton = tabBtn;
                 try {
