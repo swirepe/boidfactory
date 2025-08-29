@@ -2269,6 +2269,102 @@ if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.06
   });
 }
 return new Vector();` },
+
+          { id: 'sine-flow-field', name: 'Flow — Sine Field', code: `/**
+  Sine Flow Field
+  Steers along a static sine/cosine-based vector field.
+  Occasionally draws tiny flow hints.
+  @returns {Vector}
+*/
+const ax = boid.pos.x * 0.01;
+const ay = boid.pos.y * 0.0125;
+const angle = Math.sin(ay) * 1.2 + Math.cos(ax) * 0.8;
+const dir = new Vector(Math.cos(angle), Math.sin(angle));
+const desired = dir.mult(boid.maxSpeed * 0.85);
+// occasional drawable hint
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.02) {
+  const x = boid.pos.x, y = boid.pos.y;
+  api.addDrawable((ctx) => { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + dir.x * 10, y + dir.y * 10); ctx.strokeStyle = 'hsla(' + (((config.hue+90)%360)) + ', 100%, 70%, 0.16)'; ctx.lineWidth = 1; ctx.stroke(); });
+}
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.9);` },
+
+          { id: 'twin-vortices', name: 'Flow — Twin Vortices', code: `/**
+  Twin Vortices
+  Swirl around the nearer of two vortices.
+  @returns {Vector}
+*/
+const c1 = new Vector(gameState.width * 0.33, gameState.height * 0.5);
+const c2 = new Vector(gameState.width * 0.67, gameState.height * 0.5);
+const d1 = Vector.sub(c1, boid.pos), d2 = Vector.sub(c2, boid.pos);
+const use = (d1.mag() < d2.mag()) ? d1 : d2;
+if (use.mag() === 0) return new Vector();
+const tang = new Vector(-use.y, use.x).normalize();
+const desired = tang.mult(boid.maxSpeed * 0.9);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.9);` },
+
+          { id: 'edge-runner', name: 'Edge — Runner', code: `/**
+  Edge Runner
+  Near edges, run clockwise along the boundary.
+  @returns {Vector}
+*/
+const m = 80; // margin
+let dir2 = null;
+if (boid.pos.y < m) dir2 = new Vector(1, 0);
+else if (boid.pos.x > gameState.width - m) dir2 = new Vector(0, 1);
+else if (boid.pos.y > gameState.height - m) dir2 = new Vector(-1, 0);
+else if (boid.pos.x < m) dir2 = new Vector(0, -1);
+if (!dir2) return new Vector();
+const desired2 = dir2.mult(boid.maxSpeed * 0.8);
+return Vector.sub(desired2, boid.vel).limit(boid.maxForce * 0.8);` },
+
+          { id: 'trail-mesh', name: 'Trail — Mesh', code: `/**
+  Trail Mesh
+  Occasionally deposits into pheromone grid to form a mesh.
+  @returns {Vector}
+*/
+if (typeof api !== 'undefined' && api && api.depositTrail && Math.random() < 0.18) {
+  const speed = Math.max(0.2, boid.vel.mag());
+  api.depositTrail(boid.pos.x, boid.pos.y, Math.min(2.0, 0.5 + speed * 0.2));
+}
+return new Vector();` },
+
+          { id: 'lane-weave', name: 'Flow — Lane Weave', code: `/**
+  Lane Weave
+  Create horizontal lanes; alternate left/right drift by band.
+  @returns {Vector}
+*/
+const band = Math.floor(boid.pos.y / 80) % 2;
+const dir3 = band === 0 ? new Vector(1, 0.25) : new Vector(-1, -0.25);
+const desired3 = dir3.normalize().mult(boid.maxSpeed * 0.8);
+return Vector.sub(desired3, boid.vel).limit(boid.maxForce * 0.7);` },
+
+          { id: 'binary-factions', name: 'Group — Binary Factions', code: `/**
+  Binary Factions
+  Boids split into two factions; seek same faction weakly, separate from others.
+  @returns {Vector}
+*/
+if (boid._faction === undefined) boid._faction = (Math.random() < 0.5 ? 0 : 1);
+let sameC = new Vector(), sameN = 0, oppC = new Vector(), oppN = 0;
+const r = config.perceptionRadius;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < r) {
+    if (o._faction === boid._faction) { sameC.add(o.pos); sameN++; }
+    else { oppC.add(o.pos); oppN++; }
+  }
+}
+let steer = new Vector();
+if (sameN) {
+  sameC.div(sameN);
+  const toward = Vector.sub(sameC, boid.pos).normalize().mult(boid.maxSpeed * 0.6);
+  steer.add(Vector.sub(toward, boid.vel).limit(boid.maxForce * 0.6));
+}
+if (oppN) {
+  oppC.div(oppN);
+  const away = Vector.sub(boid.pos, oppC).normalize().mult(boid.maxSpeed * 0.6);
+  steer.add(Vector.sub(away, boid.vel).limit(boid.maxForce * 0.8));
+}
+return steer;` },
         ];
 
         // --- INITIALIZATION ---
@@ -2291,6 +2387,7 @@ return new Vector();` },
                 presetIncludeCore: true,
                 presetCount: 4,
                 presetTheme: 'any',
+                presetBundle: 'none',
                 ...urlParams
             };
             logConfig('Initial config:', config);
@@ -2302,8 +2399,12 @@ return new Vector();` },
             );
             setupUI();
             setupCodePane();
-            // If requested via URL, load random presets at startup
+            // If requested via URL, load bundles or random presets at startup
             if (typeof urlParams !== 'undefined' && urlParams) {
+                // Bundle has precedence if provided
+                if (typeof urlParams.presetBundle === 'string' && urlParams.presetBundle !== 'none') {
+                    loadPresetBundle(urlParams.presetBundle, !!config.presetIncludeCore);
+                } else {
                 const rp = urlParams.randomPresets;
                 if (rp !== undefined && rp !== false && rp !== 'false') {
                     let n = 4;
@@ -2313,6 +2414,7 @@ return new Vector();` },
                         n = Math.max(1, Math.min(rulePresets.length, urlParams.presetCount));
                     }
                     resetRulesWithPresets(n, !!config.presetIncludeCore, config.presetTheme || 'any');
+                }
                 }
             }
             applyDockMode(config.codePaneDock);
@@ -2624,11 +2726,29 @@ return new Vector();` },
                             <option value="mouse">Mouse</option>
                             <option value="click">Click</option>
                             <option value="drag">Drag</option>
+                            <option value="flow">Flow</option>
+                            <option value="orbit">Orbit</option>
+                            <option value="edge">Edge</option>
+                            <option value="trail">Trail</option>
+                            <option value="color">Color</option>
+                            <option value="group">Group</option>
+                            <option value="speed">Speed</option>
                             <option value="templates">Templates</option>
+                        </select>
+                    </label>
+                    <label>Bundle
+                        <select id="preset-bundle" style="background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
+                            <option value="none">None</option>
+                            <option value="flash-showcase">Flash Showcase</option>
+                            <option value="interaction-pack">Interaction Pack</option>
+                            <option value="flow-pack">Flow Pack</option>
+                            <option value="trail-pack">Trails Pack</option>
+                            <option value="core-plus-flash">Core + Flash</option>
                         </select>
                     </label>
                     <label><input type="checkbox" id="preset-include-core" ${config.presetIncludeCore ? 'checked' : ''}> Include core rules</label>
                     <button id="preset-reset-btn" style="background: var(--primary-color); color: #fff; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono);">Reset with Presets</button>
+                    <button id="preset-bundle-btn" style="background: transparent; color: #fff; border: 1px solid #555; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono);">Load Bundle</button>
                 </div>
             `;
             container.appendChild(presetsBox);
@@ -2645,6 +2765,18 @@ return new Vector();` },
                 if (config.debug) updateAllURLParams(); else updateURL('presetCount', config.presetCount);
                 resetRulesWithPresets(n, includeCore, themeKey);
             });
+            // Bundle button
+            const bundleBtn = presetsBox.querySelector('#preset-bundle-btn');
+            if (bundleBtn) {
+                bundleBtn.addEventListener('click', () => {
+                    const bundleEl = presetsBox.querySelector('#preset-bundle');
+                    const includeCoreEl = presetsBox.querySelector('#preset-include-core');
+                    const bundle = (bundleEl && bundleEl.value) || 'none';
+                    if (bundle && bundle !== 'none') {
+                        loadPresetBundle(bundle, !!includeCoreEl.checked);
+                    }
+                });
+            }
             // Persist "Include core rules" toggle in URL
             const includeCoreEl = presetsBox.querySelector('#preset-include-core');
             if (includeCoreEl) {
@@ -2672,6 +2804,15 @@ return new Vector();` },
                 themeEl.addEventListener('change', e => {
                     config.presetTheme = e.target.value || 'any';
                     if (config.debug) updateAllURLParams(); else updateURL('presetTheme', config.presetTheme);
+                });
+            }
+            // Set and persist bundle to URL
+            const bundleEl = presetsBox.querySelector('#preset-bundle');
+            if (bundleEl) {
+                bundleEl.value = (config.presetBundle || 'none');
+                bundleEl.addEventListener('change', e => {
+                    config.presetBundle = e.target.value || 'none';
+                    if (config.debug) updateAllURLParams(); else updateURL('presetBundle', config.presetBundle);
                 });
             }
             
@@ -2767,13 +2908,15 @@ return new Vector();` },
                     <li><code>splitLeftRule</code>, <code>splitRightRule</code>: rule IDs</li>
                     <li><code>presetIncludeCore</code>: boolean — include core rules in batch</li>
                     <li><code>presetCount</code>: number — default count for batch presets</li>
-                    <li><code>presetTheme</code>: string — one of <code>any</code>, <code>flash</code>, <code>mouse</code>, <code>click</code>, <code>drag</code>, <code>templates</code></li>
+                    <li><code>presetTheme</code>: string — one of <code>any</code>, <code>flash</code>, <code>mouse</code>, <code>click</code>, <code>drag</code>, <code>flow</code>, <code>orbit</code>, <code>edge</code>, <code>trail</code>, <code>color</code>, <code>group</code>, <code>speed</code>, <code>templates</code></li>
+                    <li><code>presetBundle</code>: string — one of <code>none</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
                     <li><code>randomPresets</code>: boolean|number — when true/number, loads random presets on start; number picks that many</li>
                 </ul>
                 <h4>Examples</h4>
                 <ul>
                     <li><code>${urlBase}?presetIncludeCore=false&amp;presetTheme=flash&amp;randomPresets=true</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetCount=6&amp;presetTheme=mouse&amp;randomPresets=6</code></li>
+                    <li><code>${urlBase}?presetIncludeCore=true&amp;presetBundle=flow-pack</code></li>
                     <li><code>${urlBase}?debug=true&amp;hue=320&amp;boidCount=300</code></li>
                 </ul>
                 <h3>Change Log</h3>
@@ -3309,7 +3452,14 @@ return new Vector();` },
                 mouse: (p) => /mouse|click/i.test(p.id) || /mouse|click/i.test(p.name || ''),
                 drag:  (p) => /drag/i.test(p.id) || /drag/i.test(p.name || ''),
                 click: (p) => /click/i.test(p.id) || /click/i.test(p.name || ''),
-                templates: (p) => /^template-/.test(p.id)
+                templates: (p) => /^template-/.test(p.id),
+                flow: (p) => /flow|vortex|orbit|lane/i.test(p.id) || /Flow|Vortex|Orbit|Lane/i.test(p.name || ''),
+                edge: (p) => /edge|boundary|wall|runner/i.test(p.id) || /Edge/i.test(p.name || ''),
+                trail: (p) => /trail|pheromone|mesh/i.test(p.id) || /Trail/i.test(p.name || ''),
+                orbit: (p) => /orbit|vortex|centroid/i.test(p.id) || /Orbit|Vortex|Centroid/i.test(p.name || ''),
+                color: (p) => /hue|color|polarize/i.test(p.id) || /Color|Hue/i.test(p.name || ''),
+                group: (p) => /group|faction/i.test(p.id) || /Group|Factions/i.test(p.name || ''),
+                speed: (p) => /speed|comet|boost/i.test(p.id) || /Speed|Comet/i.test(p.name || '')
             };
             const filterFn = presetThemes[themeKey] || presetThemes.any;
             const themed = nonCorePresets.filter(filterFn);
@@ -3339,6 +3489,40 @@ return new Vector();` },
             // Add remaining selections in order
             for (let i = 1; i < selected.length; i++) addRuleWithPreset(selected[i]);
             // Rebuild UI bits
+            if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
+            setupConfigUI();
+        }
+
+        function loadPresetBundle(bundleKey, includeCore) {
+            const coreIds = new Set(['cohesion-core','alignment-core','separation-core','novel-core']);
+            const corePresets = rulePresets.filter(p => coreIds.has(p.id));
+            const presetById = Object.fromEntries(rulePresets.map(p => [p.id, p]));
+            const bundles = {
+                'flash-showcase': ['spark-burst','glow-orb','comet-flares','shockwave-rings','twinkle-trails'],
+                'interaction-pack': ['mouse-vortex','mouse-attract','click-explosion','drag-wind-gust','drag-line-tractor'],
+                'flow-pack': ['sine-flow-field','twin-vortices','orbit-centroid','lane-weave'],
+                'trail-pack': ['template-trail-heatmap','trail-mesh','comet-flares','template-drawable-streak'],
+                'core-plus-flash': ['cohesion-core','alignment-core','separation-core','glow-orb']
+            };
+            const ids = bundles[bundleKey] || [];
+            const selected = [];
+            if (includeCore) selected.push(...corePresets);
+            for (const id of ids) {
+                const p = presetById[id];
+                if (p) selected.push(p);
+            }
+            if (selected.length === 0) return;
+            if (userFunctions.length === 0) {
+                addRuleWithPreset(selected[0]);
+            } else {
+                const first = userFunctions[0].name;
+                const ed = editors[first]; if (ed) ed.setValue(selected[0].code);
+                const targetName = sanitizeRuleName(selected[0].name);
+                if (first !== targetName) renameRule(first, targetName);
+                const others = userFunctions.slice(1).map(u => u.name);
+                others.forEach(nm => deleteRule(nm));
+            }
+            for (let i = 1; i < selected.length; i++) addRuleWithPreset(selected[i]);
             if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
             setupConfigUI();
         }

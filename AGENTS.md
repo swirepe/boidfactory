@@ -76,3 +76,4 @@
  - Codex CLI Agent — signed on 2025-08-29, added Drawables/Frame graph to Stats overlay and wired it to per-frame drawables.
  - Codex CLI Agent — signed on 2025-08-29, added 5 flashy drawable presets (spark burst, glow orb, comet flares, shockwave rings, twinkle trails) with occasional visuals.
  - Codex CLI Agent — signed on 2025-08-29, added themed batch selection (Any, Flash, Mouse, Click, Drag, Templates) with URL param `presetTheme`.
+ - Codex CLI Agent — signed on 2025-08-29, added more interesting presets, more themes (flow, orbit, edge, trail, color, group, speed), and premade bundles with `presetBundle` param and UI.
