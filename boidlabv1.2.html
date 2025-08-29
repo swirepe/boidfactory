@@ -3295,6 +3295,11 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 configTab: 'settings',
                 ...urlParams
             };
+            // Default rulesSelection to core rules if none provided via URL
+            if (!Array.isArray(config.rulesSelection) || config.rulesSelection.length === 0) {
+                config.rulesSelection = ['cohesion-core','alignment-core','separation-core','novel-core'];
+                try { if (!Array.isArray(urlParams.rulesSelection)) { if (config.debug) updateAllURLParams(); else updateURL('rulesSelection', config.rulesSelection); } } catch(e){}
+            }
             logConfig('Initial config:', config);
             userFunctions.push(
                 { name: 'cohesion', weight: config.cohesionWeight, updateBoid: null },
@@ -3304,22 +3309,26 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             );
             setupUI();
             setupCodePane();
-            // If requested via URL, load bundles or random presets at startup
+            // If requested via URL, apply rulesSelection first; else load bundles or random presets at startup
             if (typeof urlParams !== 'undefined' && urlParams) {
-                // Bundle has precedence if provided
-                if (typeof urlParams.presetBundle === 'string' && urlParams.presetBundle !== 'none') {
-                    loadPresetBundle(urlParams.presetBundle, !!config.presetIncludeCore);
+                if (Array.isArray(urlParams.rulesSelection) && urlParams.rulesSelection.length > 0) {
+                    try { applyPresetSelection(urlParams.rulesSelection, !!config.presetIncludeCore); } catch (e) { console.error('Failed to apply rulesSelection from URL:', e); }
                 } else {
-                const rp = urlParams.randomPresets;
-                if (rp !== undefined && rp !== false && rp !== 'false') {
-                    let n = 4;
-                    if (typeof rp === 'number') {
-                        n = Math.max(1, Math.min(rulePresets.length, rp));
-                    } else if (typeof urlParams.presetCount === 'number') {
-                        n = Math.max(1, Math.min(rulePresets.length, urlParams.presetCount));
+                    // Bundle has precedence if provided
+                    if (typeof urlParams.presetBundle === 'string' && urlParams.presetBundle !== 'none') {
+                        loadPresetBundle(urlParams.presetBundle, !!config.presetIncludeCore);
+                    } else {
+                        const rp = urlParams.randomPresets;
+                        if (rp !== undefined && rp !== false && rp !== 'false') {
+                            let n = 4;
+                            if (typeof rp === 'number') {
+                                n = Math.max(1, Math.min(rulePresets.length, rp));
+                            } else if (typeof urlParams.presetCount === 'number') {
+                                n = Math.max(1, Math.min(rulePresets.length, urlParams.presetCount));
+                            }
+                            resetRulesWithPresets(n, !!config.presetIncludeCore, config.presetTheme || 'any');
+                        }
                     }
-                    resetRulesWithPresets(n, !!config.presetIncludeCore, config.presetTheme || 'any');
-                }
                 }
             }
             applyDockMode(config.codePaneDock);
