@@ -3334,6 +3334,12 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                         <select id="preset-bundle" style="background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
                             <option value="none">None</option>
                             <option value="ai-ml-pack">AI/ML Pack</option>
+                            <option value="clustering-pack">Clustering Pack</option>
+                            <option value="optimization-pack">Optimization Pack</option>
+                            <option value="graphs-pack">Graphs Pack</option>
+                            <option value="dimensionality-pack">Dimensionality Pack</option>
+                            <option value="navigation-pack">Navigation Pack</option>
+                            <option value="generative-pack">Generative Pack</option>
                             <option value="flash-showcase">Flash Showcase</option>
                             <option value="interaction-pack">Interaction Pack</option>
                             <option value="flow-pack">Flow Pack</option>
@@ -3504,7 +3510,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     <li><code>presetIncludeCore</code>: boolean — include core rules in batch</li>
                     <li><code>presetCount</code>: number — default count for batch presets</li>
                     <li><code>presetTheme</code>: string — one of <code>any</code>, <code>flash</code>, <code>mouse</code>, <code>click</code>, <code>drag</code>, <code>flow</code>, <code>orbit</code>, <code>edge</code>, <code>trail</code>, <code>color</code>, <code>group</code>, <code>speed</code>, <code>templates</code></li>
-                    <li><code>presetBundle</code>: string — one of <code>none</code>, <code>ai-ml-pack</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
+                    <li><code>presetBundle</code>: string — one of <code>none</code>, <code>ai-ml-pack</code>, <code>clustering-pack</code>, <code>optimization-pack</code>, <code>graphs-pack</code>, <code>dimensionality-pack</code>, <code>navigation-pack</code>, <code>generative-pack</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
                     <li><code>randomPresets</code>: boolean|number — when true/number, loads random presets on start; number picks that many</li>
                 </ul>
                 <h4>Examples</h4>
@@ -3512,6 +3518,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     <li><code>${urlBase}?presetIncludeCore=false&amp;presetTheme=flash&amp;randomPresets=true</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetCount=6&amp;presetTheme=mouse&amp;randomPresets=6</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetBundle=ai-ml-pack</code></li>
+                    <li><code>${urlBase}?presetIncludeCore=false&amp;presetBundle=clustering-pack</code></li>
+                    <li><code>${urlBase}?presetBundle=optimization-pack</code></li>
                     <li><code>${urlBase}?debug=true&amp;hue=320&amp;boidCount=300</code></li>
                 </ul>
                 <h3>Change Log</h3>
@@ -4126,6 +4134,44 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     'ai-epsilon-greedy',
                     'ai-pca-principal-flow',
                     'ai-perceptron-boundary'
+                ],
+                // Smaller thematic bundles
+                'clustering-pack': [
+                    'ml-kmeans-centroids',
+                    'ml-gaussian-mixture',
+                    'ml-dbscan-core',
+                    'ml-pca-velocity'
+                ],
+                'optimization-pack': [
+                    'ai-epsilon-greedy',
+                    'ai-q-learning-trace',
+                    'ai-a-star-field',
+                    'ai-ant-colony-intensify',
+                    'ml-svm-margin'
+                ],
+                'graphs-pack': [
+                    'cs-bfs-frontier',
+                    'cs-pagerank-drift',
+                    'cs-consistent-hash-ring',
+                    'cs-nearest-triangulation',
+                    'cs-swarm-dijkstra'
+                ],
+                'dimensionality-pack': [
+                    'ai-pca-principal-flow',
+                    'ml-pca-velocity',
+                    'ml-tsne-local-structure',
+                    'ai-perceptron-boundary',
+                    'ml-rbf-svm-field'
+                ],
+                'navigation-pack': [
+                    'ai-a-star-field',
+                    'ai-rrt-explorer',
+                    'cs-swarm-dijkstra',
+                    'ml-belief-propagation'
+                ],
+                'generative-pack': [
+                    'ai-gan-discriminator-edge',
+                    'ai-hopfield-attractor'
                 ]
             };
             const ids = bundles[bundleKey] || [];
