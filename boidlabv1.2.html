@@ -478,6 +478,10 @@
          * @param {Config} config
          * @param {Mouse} mouse
          * @param {typeof Vector} Vector
+         * @param {{
+         *   depositTrail: (x:number, y:number, amount?:number) => void,
+         *   addDrawable: (fn: (ctx: CanvasRenderingContext2D, gs: GameState) => void) => void
+         * }} api - Optional helpers for visuals/overlays.
          * @returns {Vector}
          */
 
@@ -494,6 +498,28 @@
             quadtree: null,
             width: 0,
             height: 0,
+        };
+
+        // Optional rule-driven visuals collection and pheromone trails
+        const drawables = [];
+        const pheromones = {
+            enabled: true,
+            cell: 8,
+            cols: 0,
+            rows: 0,
+            grid: null,
+            decay: 0.97,
+        };
+
+        const RuleAPI = {
+            depositTrail(x, y, amount = 1) {
+                if (!pheromones.enabled || !pheromones.grid) return;
+                const cx = Math.floor(Math.max(0, Math.min(gameState.width - 1, x)) / pheromones.cell);
+                const cy = Math.floor(Math.max(0, Math.min(gameState.height - 1, y)) / pheromones.cell);
+                const i = cy * pheromones.cols + cx;
+                if (i >= 0 && i < pheromones.grid.length) pheromones.grid[i] += amount;
+            },
+            addDrawable(fn) { if (typeof fn === 'function') drawables.push(fn); }
         };
 
         const mouse = {
@@ -741,6 +767,7 @@
   @param {Object} config - Live configuration (e.g., perceptionRadius, weights, boidShape, etc.)
   @param {{pos: {x:number, y:number}, down: boolean}} mouse - Pointer state
   @param {typeof Vector} Vector - 2D vector helper class
+  @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api - Optional visuals helpers
   @returns {Vector} Steering force to apply this frame
 
   Cohesion: steer toward the average position of nearby boids.
@@ -775,6 +802,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);`,
   @param {Object} config
   @param {{pos: {x:number,y:number}, down: boolean}} mouse
   @param {typeof Vector} Vector
+  @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api
   @returns {Vector}
 
   Separation: steer away from nearby boids to avoid crowding.
@@ -809,6 +837,7 @@ return Vector.sub(steer, boid.vel).limit(boid.maxForce * 1.5);`,
   @param {Object} config
   @param {{pos: {x:number,y:number}, down: boolean}} mouse
   @param {typeof Vector} Vector
+  @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api
   @returns {Vector}
 
   Alignment: match the average heading (velocity) of neighbors.
@@ -838,6 +867,7 @@ return Vector.sub(avgVel, boid.vel).limit(boid.maxForce);`,
   @param {Object} config
   @param {{pos: {x:number,y:number}, down: boolean}} mouse
   @param {typeof Vector} Vector
+  @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api
   @returns {Vector}
 
   Novel: mouse-driven flee force when mouse is down.
@@ -1190,6 +1220,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
     1) Compute forward unit vector f from boid velocity.
     2) For neighbors within angle cone (~60°), average their velocities.
     3) Steer to match that average (like following a trail laid ahead).
+    4) Deposit a trail at the current position for others to follow.
   @returns {Vector}
 */
 const f = boid.vel.clone().normalize();
@@ -1202,6 +1233,10 @@ for (const o of neighbors) {
 }
 if (!n) return new Vector();
 const desired = sum.div(n).normalize().mult(boid.maxSpeed);
+// Leave a pheromone trail mark (amount scales with speed)
+if (typeof api !== 'undefined' && api && api.depositTrail) {
+  api.depositTrail(boid.pos.x, boid.pos.y, Math.min(1.5, 0.2 + boid.vel.mag() * 0.1));
+}
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
           { id: 'nature-predator-shadow', name: 'Nature — Predator Shadowing', code: `/**
@@ -1628,6 +1663,10 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         function setupCanvas() {
             gameState.width = canvas.width = window.innerWidth;
             gameState.height = canvas.height = window.innerHeight;
+            // Pheromone grid sizing
+            pheromones.cols = Math.max(1, Math.ceil(gameState.width / pheromones.cell));
+            pheromones.rows = Math.max(1, Math.ceil(gameState.height / pheromones.cell));
+            pheromones.grid = new Float32Array(pheromones.cols * pheromones.rows);
             if (gameState.boids.length > 0) createBoids();
         }
 
@@ -2005,6 +2044,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     'config',
                     'mouse', 'mouse.pos.x', 'mouse.pos.y', 'mouse.down',
                     'Vector', 'Vector.sub', 'Vector.dist', 'Vector.random2D',
+                    'api', 'api.depositTrail', 'api.addDrawable',
                     'add()', 'sub()', 'mult()', 'div()', 'mag()', 'normalize()', 'limit()', 'heading()', 'clone()',
                     'return new Vector(0, 0)', 'const v = new Vector(0, 0)'
                 ];
@@ -2046,7 +2086,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     const tabButton = document.querySelector(`.tab-button[data-tab="${fn.name}"]`);
                     try {
                         const code = editor.getValue();
-                        const params = ['boid', 'gameState', 'neighbors', 'config', 'mouse', 'Vector'];
+                        const params = ['boid', 'gameState', 'neighbors', 'config', 'mouse', 'Vector', 'api'];
                         const dynamicFunc = new Function(...params, code);
                         const prev = fn.updateBoid;
 
@@ -2056,7 +2096,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                         const mockNeighbors = [];
                         let ok = true;
                         try {
-                            const res = dynamicFunc(mockBoid, mockState, mockNeighbors, config, mouse, Vector);
+                            const res = dynamicFunc(mockBoid, mockState, mockNeighbors, config, mouse, Vector, RuleAPI);
                             // Must be Vector or falsy; non-Vector returns are tolerated as no-op
                             if (res && !(res instanceof Vector)) ok = false;
                         } catch (e) {
@@ -2067,7 +2107,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                         // Adopt the new function, wrapped with runtime safety
                         fn.updateBoid = (boid, gameState, neighbors) => {
                             try {
-                                const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector);
+                                const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector, RuleAPI);
                                 return out instanceof Vector ? out : new Vector();
                             } catch (e) {
                                 const now = performance.now();
@@ -2250,9 +2290,20 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
         function buildEditorBar(ruleName) {
             const bar = document.createElement('div'); bar.className = 'editor-bar';
-            // Preset select
-            const sel = document.createElement('select');
-            rulePresets.forEach((p, idx) => { const o=document.createElement('option'); o.value=p.id; o.textContent=p.name; if(idx===0) o.selected=true; sel.appendChild(o); });
+            // Preset select (grouped by category)
+            const label = document.createElement('span'); label.style.color = '#ddd'; label.style.fontSize = '12px'; label.textContent = 'Presets (by category)';
+            bar.appendChild(label);
+            const sel = document.createElement('select'); sel.title = 'Presets (grouped by category)';
+            const groups = categorizePresets();
+            const order = ['Core', 'Nature', 'AI / ML / CS', 'Physics', 'Math', 'Other'];
+            order.forEach(label => {
+                if (!groups[label] || groups[label].length === 0) return;
+                const og = document.createElement('optgroup'); og.label = label;
+                groups[label].forEach((p, idx) => {
+                    const o = document.createElement('option'); o.value = p.id; o.textContent = p.name; if (!sel.firstChild && idx === 0) o.selected = true; og.appendChild(o);
+                });
+                sel.appendChild(og);
+            });
             bar.appendChild(sel);
             // Fill button
             const fill = document.createElement('button'); fill.className='bar-btn'; fill.title='Fill with preset'; fill.textContent='Fill';
@@ -2292,6 +2343,20 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             add.addEventListener('click', () => addRule());
             bar.appendChild(add);
             return bar;
+        }
+
+        function categorizePresets() {
+            const groups = { 'Core': [], 'Nature': [], 'AI / ML / CS': [], 'Physics': [], 'Math': [], 'Other': [] };
+            for (const p of rulePresets) {
+                const name = p.name || '';
+                if (/\(Core\)/i.test(name) || /-core$/.test(p.id)) groups['Core'].push(p);
+                else if (/^Nature\b/i.test(name)) groups['Nature'].push(p);
+                else if (/^(AI|CS)\b|AI —|AI\s—|AI\s-/i.test(name)) groups['AI / ML / CS'].push(p);
+                else if (/^Physics\b/i.test(name)) groups['Physics'].push(p);
+                else if (/^Math\b/i.test(name)) groups['Math'].push(p);
+                else groups['Other'].push(p);
+            }
+            return groups;
         }
 
         function sanitizeRuleName(name) {
@@ -2348,13 +2413,13 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 const tabButton = tabBtn;
                 try {
                     const code = editor.getValue();
-                    const params = ['boid','gameState','neighbors','config','mouse','Vector'];
+                    const params = ['boid','gameState','neighbors','config','mouse','Vector','api'];
                     const dynamicFunc = new Function(...params, code);
                     // dry-run
                     const mockBoid = new Boid(0,0); const mockState = { boids:[mockBoid], quadtree:null, width:10, height:10 };
-                    let ok = true; try { const res = dynamicFunc(mockBoid, mockState, [], config, mouse, Vector); if (res && !(res instanceof Vector)) ok = false; } catch(e){ ok=false; }
+                    let ok = true; try { const res = dynamicFunc(mockBoid, mockState, [], config, mouse, Vector, RuleAPI); if (res && !(res instanceof Vector)) ok = false; } catch(e){ ok=false; }
                     if (!ok) throw new Error('Rule dry-run failed');
-                    fnObj.updateBoid = (boid, gameState, neighbors) => { try { const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector); return out instanceof Vector ? out : new Vector(); } catch (e) { fnObj._fallbackUntil = performance.now()+2000; updateRuleStatusUI(); return new Vector(); } };
+                    fnObj.updateBoid = (boid, gameState, neighbors) => { try { const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector, RuleAPI); return out instanceof Vector ? out : new Vector(); } catch (e) { fnObj._fallbackUntil = performance.now()+2000; updateRuleStatusUI(); return new Vector(); } };
                     tabButton.classList.add('reloaded-success'); setTimeout(()=>tabButton.classList.remove('reloaded-success'),600);
                 } catch (e) {
                     console.error(`Error reloading rule '${name}':`, e);
@@ -2522,6 +2587,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             lastTime = timestamp;
             fps = 1000 / deltaTime;
             const t0 = performance.now();
+            // Clear per-frame drawables before update so rules can register new ones
+            drawables.length = 0;
             update();
             const updateTime = performance.now() - t0;
             draw();
@@ -2533,6 +2600,11 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             const boundary = new Rectangle(gameState.width / 2, gameState.height / 2, gameState.width / 2, gameState.height / 2);
             gameState.quadtree = new QuadTree(boundary, 4);
             for (let boid of gameState.boids) gameState.quadtree.insert(boid);
+            // Pheromone decay
+            if (pheromones.grid) {
+                const g = pheromones.grid; const d = pheromones.decay;
+                for (let i = 0; i < g.length; i++) g[i] *= d;
+            }
             // Protect simulation step from rule runtime errors
             for (let boid of gameState.boids) {
                 try {
@@ -2549,8 +2621,28 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         function draw() {
             ctx.fillStyle = 'rgba(26, 26, 26, 0.25)';
             ctx.fillRect(0, 0, gameState.width, gameState.height);
+            // Draw pheromone heatmap (lightweight grid rendering)
+            if (pheromones.grid) {
+                const cell = pheromones.cell; const g = pheromones.grid;
+                for (let y = 0; y < pheromones.rows; y++) {
+                    for (let x = 0; x < pheromones.cols; x++) {
+                        const v = g[y * pheromones.cols + x];
+                        if (v > 0.02) {
+                            const a = Math.min(0.25, v * 0.08);
+                            ctx.fillStyle = `hsla(${(config.hue + 60) % 360}, 100%, 60%, ${a.toFixed(3)})`;
+                            ctx.fillRect(x * cell, y * cell, cell, cell);
+                        }
+                    }
+                }
+            }
             if (config.visualizeQuadtree) gameState.quadtree.draw(ctx);
             for (let boid of gameState.boids) boid.draw(ctx);
+            // Custom rule drawables (if any)
+            if (drawables.length) {
+                for (const fn of drawables) {
+                    try { fn(ctx, gameState); } catch (e) { /* ignore */ }
+                }
+            }
             if (mouse.down) {
                  ctx.beginPath();
                  ctx.arc(mouse.pos.x, mouse.pos.y, 150, 0, Math.PI * 2);
