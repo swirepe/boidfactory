@@ -108,3 +108,9 @@ sometimes when a rule refreshes, the simulation crashes and doesn't recover.  le
 ==== 2025-08-28T14:24:00Z Prompt Start ====
 Let's show an indicator when we are using fallback code for a rule
 ==== Prompt End ====
+==== 2025-08-28T14:32:00Z Prompt Start ====
+When the code pane is maximized, add a way to view two code editors open side by side, each open to a different rule. Add a way to pick which rule to open in each editor. Two editors cannot be open to the same rule.
+==== Prompt End ====
+==== 2025-08-28T14:38:00Z Prompt Start ====
+When the code pane is maximized, add an icon next to the "Dock Bottom" icon.  When that icon is pressed, it toggles between one code editor and two.  When there is one code editor, the content is set by the tabs as usual.  When there are two code editors, the tabs are replaced with dropdowns over the editors.
+==== Prompt End ====

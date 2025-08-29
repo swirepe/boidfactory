@@ -227,6 +227,19 @@
         .tab-content.active {
             display: block;
         }
+        /* Maximized split controls and panes */
+        .split-controls { display: none; }
+        #code-pane.maximized.split-on .split-controls { display: flex; align-items: center; gap: 8px; padding: 6px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .split-controls label { font-family: var(--font-mono); font-size: 12px; color: #ddd; }
+        .split-controls select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; }
+        .split-view { display: none; }
+        #code-pane.maximized.split-on .split-view { display: flex; gap: 8px; }
+        .split-pane { flex: 1; min-width: 0; padding: 6px; box-sizing: border-box; }
+        /* Hide tabs when in split mode, but keep row for dock icons */
+        #code-pane.maximized.split-on .tab-button { display: none; }
+        /* Show split toggle icon only in maximized mode */
+        .dock-btn[data-action="toggle-split"] { display: none; }
+        #code-pane.maximized .dock-btn[data-action="toggle-split"] { display: inline-flex; }
         /* Editor sizing by dock mode */
         .CodeMirror { border: none; }
         #code-pane.dock-bottom.visible .CodeMirror { height: calc(40vh - 92px) !important; }
@@ -333,6 +346,13 @@
             <button class="tab-button" data-tab="alignment">Alignment</button>
             <button class="tab-button" data-tab="novel">Novel</button>
             <span class="dock-controls" aria-label="Code pane docking controls">
+                <!-- Split toggle icon: two panes -->
+                <button class="dock-btn" data-action="toggle-split" title="Toggle split view" aria-label="Toggle split view">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <rect x="4" y="5" width="16" height="14" rx="2"/>
+                        <line x1="12" y1="6" x2="12" y2="19" stroke="currentColor" stroke-width="1.5"/>
+                    </svg>
+                </button>
                 <!-- Bottom dock icon: bottom band inside a window -->
                 <button class="dock-btn" data-dock="bottom" title="Dock bottom" aria-label="Dock bottom">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
@@ -355,6 +375,16 @@
                     </svg>
                 </button>
             </span>
+        </div>
+        <div class="split-controls" id="split-controls">
+            <label for="split-left">Left</label>
+            <select id="split-left"></select>
+            <label for="split-right">Right</label>
+            <select id="split-right"></select>
+        </div>
+        <div class="split-view" id="split-view">
+            <div class="split-pane" data-slot="left"></div>
+            <div class="split-pane" data-slot="right"></div>
         </div>
         <div id="cohesion" class="tab-content active"><textarea></textarea></div>
         <div id="separation" class="tab-content"><textarea></textarea></div>
@@ -815,6 +845,9 @@ return mouseForce;`
                 boidShape: 'triangle', boidSize: 10, boidSizeVariance: 2,
                 header: "Boids Simulation", subheader: "Click and drag to interact",
                 codePaneDock: 'bottom', // bottom | left | max
+                codePaneLeftWidth: null,
+                splitLeftRule: 'cohesion',
+                splitRightRule: 'separation',
                 ...urlParams
             };
             logConfig('Initial config:', config);
@@ -887,10 +920,18 @@ return mouseForce;`
                 updateCodeOverlayButton();
                 refreshEditors();
             });
-            // Dock controls
+            // Dock controls + split toggle
             document.querySelectorAll('.dock-btn').forEach(btn => {
                 btn.addEventListener('click', (e) => {
+                    const action = e.currentTarget.getAttribute('data-action');
+                    if (action === 'toggle-split') {
+                        config.splitEnabled = !config.splitEnabled;
+                        updateSplitModeUI();
+                        if (!config.debug) updateURL('splitEnabled', !!config.splitEnabled);
+                        return;
+                    }
                     const mode = e.currentTarget.getAttribute('data-dock');
+                    if (!mode) return;
                     config.codePaneDock = mode === 'max' ? 'max' : (mode === 'left' ? 'left' : 'bottom');
                     applyDockMode(config.codePaneDock);
                     if (config.debug) updateAllURLParams(); else updateURL('codePaneDock', config.codePaneDock);
@@ -915,17 +956,39 @@ return mouseForce;`
                     pane.style.width = '';
                 }
                 document.body.classList.remove('code-pane-maximized');
+                updateSplitModeUI();
             } else if (mode === 'max' || mode === 'maximized') {
                 pane.classList.add('maximized', 'visible');
                 document.querySelector('.dock-btn[data-dock="max"]').classList.add('active');
                 document.body.classList.add('code-pane-maximized');
+                updateSplitModeUI();
             } else {
                 pane.classList.add('dock-bottom');
                 document.querySelector('.dock-btn[data-dock="bottom"]').classList.add('active');
                 document.body.classList.remove('code-pane-maximized');
+                updateSplitModeUI();
             }
             updateCodeOverlayButton();
             // Keep collapsed state meaningful for bottom/left
+            refreshEditors();
+        }
+
+        function updateSplitModeUI() {
+            const pane = document.getElementById('code-pane');
+            const splitBtn = document.querySelector('.dock-btn[data-action="toggle-split"]');
+            const maximized = pane.classList.contains('maximized');
+            const enabled = !!config.splitEnabled && maximized;
+            pane.classList.toggle('split-on', enabled);
+            if (splitBtn) splitBtn.classList.toggle('active', enabled);
+            if (setupCodePane._split) {
+                if (enabled) {
+                    setupCodePane._split.showSplitUI(true);
+                    setupCodePane._split.updateSplitMounts();
+                } else {
+                    setupCodePane._split.showSplitUI(false);
+                    setupCodePane._split.unmountAll();
+                }
+            }
             refreshEditors();
         }
 
@@ -1187,6 +1250,8 @@ return mouseForce;`
                 return { list, from, to };
             }
 
+            const originalParents = {};
+
             for (const fn of userFunctions) {
                 const textarea = document.querySelector(`#${fn.name} textarea`);
                 textarea.value = defaultFunctionsCode[fn.name];
@@ -1196,6 +1261,7 @@ return mouseForce;`
                     extraKeys: { 'Ctrl-Space': 'autocomplete' },
                     hintOptions: { hint: ruleHint, completeSingle: false }
                 });
+                originalParents[fn.name] = document.getElementById(fn.name);
 
                 // Live-compile user rule code into a function with a narrow, explicit scope.
                 // Scope parameters available inside the editor code:
@@ -1271,6 +1337,96 @@ return mouseForce;`
                 });
                 updateFunction(editors[fn.name]); // Initial compilation
             }
+
+            // Split view setup
+            const leftSel = document.getElementById('split-left');
+            const rightSel = document.getElementById('split-right');
+            const slots = {
+                left: document.querySelector('.split-pane[data-slot="left"]'),
+                right: document.querySelector('.split-pane[data-slot="right"]'),
+            };
+            const mounted = {}; // rule -> slot name
+
+            function populateSelects() {
+                [leftSel, rightSel].forEach(sel => { sel.innerHTML = ''; });
+                userFunctions.forEach(fn => {
+                    const optL = document.createElement('option'); optL.value = fn.name; optL.textContent = fn.name;
+                    const optR = document.createElement('option'); optR.value = fn.name; optR.textContent = fn.name;
+                    leftSel.appendChild(optL); rightSel.appendChild(optR);
+                });
+            }
+            function updateSelectStates() {
+                // Ensure distinct selections
+                if (leftSel.value === rightSel.value) {
+                    const other = userFunctions.find(u => u.name !== leftSel.value);
+                    if (other) rightSel.value = other.name;
+                }
+                // Disable chosen rule in the opposite select
+                Array.from(leftSel.options).forEach(o => { o.disabled = (o.value === rightSel.value); });
+                Array.from(rightSel.options).forEach(o => { o.disabled = (o.value === leftSel.value); });
+            }
+            function unmountRule(rule) {
+                if (!mounted[rule]) return;
+                const slotName = mounted[rule];
+                const wrapper = editors[rule] && editors[rule].getWrapperElement();
+                if (wrapper && originalParents[rule]) {
+                    originalParents[rule].appendChild(wrapper);
+                    editors[rule].refresh();
+                }
+                delete mounted[rule];
+            }
+            function mountRule(rule, slotName) {
+                if (!rule || !slots[slotName]) return;
+                // If this rule is mounted elsewhere, unmount first
+                unmountRule(rule);
+                const wrapper = editors[rule] && editors[rule].getWrapperElement();
+                if (wrapper) {
+                    slots[slotName].appendChild(wrapper);
+                    mounted[rule] = slotName;
+                    editors[rule].refresh();
+                }
+            }
+            function updateSplitMounts() {
+                // Ensure rules are distinct
+                updateSelectStates();
+                const L = leftSel.value;
+                const R = rightSel.value;
+                // Unmount any rule not chosen
+                Object.keys(mounted).forEach(rule => {
+                    if (rule !== L && rule !== R) unmountRule(rule);
+                });
+                // If a chosen rule is mounted in the wrong place, move it
+                if (mounted[L] !== 'left') mountRule(L, 'left');
+                if (mounted[R] !== 'right') mountRule(R, 'right');
+            }
+            function showSplitUI(show) {
+                document.getElementById('split-controls').style.display = show ? 'flex' : 'none';
+                document.getElementById('split-view').style.display = show ? 'flex' : 'none';
+            }
+            // Expose hooks for dock mode changes
+            setupCodePane._split = {
+                populateSelects, updateSplitMounts, showSplitUI,
+                get leftSel() { return leftSel; },
+                get rightSel() { return rightSel; },
+                unmountAll: () => { Object.keys(mounted).forEach(unmountRule); }
+            };
+            populateSelects();
+            leftSel.value = config.splitLeftRule || 'cohesion';
+            rightSel.value = (config.splitRightRule && config.splitRightRule !== leftSel.value)
+                ? config.splitRightRule : (userFunctions.find(u => u.name !== leftSel.value) || userFunctions[0]).name;
+            updateSelectStates();
+            leftSel.addEventListener('change', () => {
+                config.splitLeftRule = leftSel.value;
+                if (!config.debug) updateURL('splitLeftRule', config.splitLeftRule);
+                updateSplitMounts();
+            });
+            rightSel.addEventListener('change', () => {
+                config.splitRightRule = rightSel.value;
+                if (!config.debug) updateURL('splitRightRule', config.splitRightRule);
+                updateSplitMounts();
+            });
+            // Reflect initial split toggle state when first applied to maximized
+            updateSplitModeUI();
         }
         
         // --- SIMULATION LOGIC ---
