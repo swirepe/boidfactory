@@ -178,3 +178,6 @@ let's add a new tab to the config overlay with all the rules listed out, so we c
 Yes please, both the search/filter and the per-group actions
 Style the 'settings/rules' buttons into tabs
 Yes, add a note (clarify Random Presets vs Preset Bundles)
+the physics section of the rules is empty
+yes please (add Physics Pack bundle)
+all the physics rules seem to be in the AI section — fix categorization regex to anchor AI/ML/CS and check Physics first

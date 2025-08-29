@@ -2785,6 +2785,92 @@ if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ //
 }); }
 return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
 
+          { id: 'physics-inverse-square-gravity', name: 'Physics — Inverse‑Square Gravity', code: `/**
+  Inverse‑Square Gravity
+  Single attractor at center; force ~ 1/r^2 toward the center with soft clamp near the core.
+  Visuals: Faint concentric rings at the center.
+  @returns {Vector}
+*/
+const Gc = new Vector(gameState.width/2, gameState.height/2);
+const dG = Vector.sub(Gc, boid.pos); const r2 = Math.max(100, dG.x*dG.x + dG.y*dG.y);
+const Fg = dG.normalize().mult(boid.maxSpeed * Math.min(1.2, 9000 / r2));
+const desired = Fg;
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ for(let i=1;i<=3;i++){ ctx.beginPath(); ctx.arc(Gc.x,Gc.y,i*40,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+120)%360)) + ',100%,70%,' + (0.12 - i*0.02) + ')'; ctx.lineWidth=1; ctx.stroke(); } }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'physics-coulomb-gas', name: 'Physics — Coulomb Gas', code: `/**
+  Coulomb Gas (Mutual Repulsion)
+  Neighbors repel with 1/r potential; damped by distance. Produces gas-like spreading.
+  Visuals: Short away arrows for close neighbors (occasional for clarity).
+  @returns {Vector}
+*/
+let F = new Vector(); const R = config.perceptionRadius;
+for (const o of neighbors){ const d = Vector.sub(boid.pos, o.pos); const r2 = d.x*d.x + d.y*d.y; if (r2>1 && r2 < R*R){ F.add(d.clone().div(Math.sqrt(r2)).div(Math.max(10, r2))); } }
+let desired = F.normalize().mult(boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable && Math.random()<0.08){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+F.x*300, y+F.y*300); ctx.strokeStyle='hsla(' + (((config.hue+300)%360)) + ',100%,70%,0.18)'; ctx.lineWidth=1; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'physics-harmonic-grid', name: 'Physics — Harmonic Oscillator Grid', code: `/**
+  Harmonic Oscillator Grid
+  Each boid is pulled toward the nearest grid anchor with spring-like restoring force and damping.
+  Visuals: Grid anchor dots and a line to the local anchor.
+  @returns {Vector}
+*/
+const step=120; const ax=Math.round(boid.pos.x/step)*step; const ay=Math.round(boid.pos.y/step)*step; const anchor=new Vector(ax,ay);
+const k=0.02, c=0.12; const x=Vector.sub(anchor, boid.pos); // displacement
+const spring = x.mult(k*step); const damp = boid.vel.clone().mult(-c);
+const desired = spring.add(damp).limit(boid.maxSpeed);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(anchor.x,anchor.y,3,0,Math.PI*2); ctx.fillStyle='hsla(' + (((config.hue+160)%360)) + ',100%,70%,0.9)'; ctx.fill(); ctx.beginPath(); ctx.moveTo(boid.pos.x,boid.pos.y); ctx.lineTo(anchor.x,anchor.y); ctx.strokeStyle='hsla(' + (((config.hue+160)%360)) + ',100%,70%,0.18)'; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'physics-lorenz-drift', name: 'Physics — Lorenz Drift', code: `/**
+  Lorenz Drift (Projected)
+  Sample a Lorenz system derivative based on mapped canvas coords; steer along its direction.
+  Visuals: Small orientation tick in derivative direction.
+  @returns {Vector}
+*/
+const sx=10, sy=10; // scale
+let xL = (boid.pos.x - gameState.width/2)/sx; let yL=(boid.pos.y - gameState.height/2)/sy; let zL = Math.sin(performance.now()/1500);
+const sigma=10, rho=28, beta=8/3;
+const dx = sigma*(yL - xL);
+const dy = xL*(rho - zL) - yL;
+// project to 2D
+const dir = new Vector(dx, dy).normalize();
+const desired = dir.mult(boid.maxSpeed*0.85);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+dir.x*12,y+dir.y*12); ctx.strokeStyle='hsla(' + (((config.hue+220)%360)) + ',100%,70%,0.2)'; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'physics-wave-interference', name: 'Physics — Wave Interference', code: `/**
+  Wave Interference
+  Two radial waves interfere; steer along gradient of the combined phase field.
+  Visuals: Interference bands rendered sparsely for context.
+  @returns {Vector}
+*/
+const c1=new Vector(gameState.width*0.3, gameState.height*0.5); const c2=new Vector(gameState.width*0.7, gameState.height*0.5);
+const k=0.04, w=performance.now()/600;
+function phase(c){ const r=Vector.dist(boid.pos,c); return Math.sin(k*r - w); }
+const f = phase(c1) + phase(c2);
+// approximate gradient via finite differences
+const eps=2; const px = (Math.sin(k*Vector.dist(new Vector(boid.pos.x+eps,boid.pos.y),c1)-w)+Math.sin(k*Vector.dist(new Vector(boid.pos.x+eps,boid.pos.y),c2)-w)) - (Math.sin(k*Vector.dist(new Vector(boid.pos.x-eps,boid.pos.y),c1)-w)+Math.sin(k*Vector.dist(new Vector(boid.pos.x-eps,boid.pos.y),c2)-w));
+const py = (Math.sin(k*Vector.dist(new Vector(boid.pos.x,boid.pos.y+eps),c1)-w)+Math.sin(k*Vector.dist(new Vector(boid.pos.x,boid.pos.y+eps),c2)-w)) - (Math.sin(k*Vector.dist(new Vector(boid.pos.x,boid.pos.y-eps),c1)-w)+Math.sin(k*Vector.dist(new Vector(boid.pos.x,boid.pos.y-eps),c2)-w));
+const grad = new Vector(px, py).normalize();
+const desired = grad.mult(boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable && Math.random()<0.06){ api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+190)%360)) + ',100%,70%,0.08)'; for(let x=0;x<gameState.width;x+=28){ ctx.beginPath(); for(let y=0;y<gameState.height;y+=8){ const r1=Math.sin(k*Math.hypot(x-c1.x,y-c1.y)-w), r2=Math.sin(k*Math.hypot(x-c2.x,y-c2.y)-w); const val=r1+r2; const yy=y+val*3; if (y===0) ctx.moveTo(x,yy); else ctx.lineTo(x,yy); } ctx.stroke(); } }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.85);` },
+
+          { id: 'physics-gyroscopic-precession', name: 'Physics — Gyroscopic Precession', code: `/**
+  Gyroscopic Precession
+  Velocity precesses (rotates) about a central torque; produces graceful arcs.
+  Visuals: Ring marker at center; short orientation arc at boid.
+  @returns {Vector}
+*/
+const C=new Vector(gameState.width/2, gameState.height/2); const r=Vector.sub(boid.pos,C);
+const omega=0.04; // precession rate
+const v=boid.vel.clone(); const rot=new Vector(-v.y, v.x).mult(omega);
+const desired = v.add(rot).normalize().mult(boid.maxSpeed*0.9);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(C.x,C.y,10,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+40)%360)) + ',100%,70%,0.18)'; ctx.stroke(); const ang=Math.atan2(desired.y, desired.x); ctx.beginPath(); ctx.arc(boid.pos.x, boid.pos.y, 8, ang-0.4, ang+0.4); ctx.strokeStyle='hsla(' + (((config.hue+40)%360)) + ',100%,70%,0.22)'; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
           { id: 'ai-genetic-drift', name: 'AI — Genetic Drift', code: `/**
   Genetic Drift (GA-Inspired)
   Occasional mutation of heading; selection bias toward faster neighbors.
@@ -3536,6 +3622,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                         <select id="preset-bundle" style="background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
                             <option value="none">None</option>
                             <option value="ai-ml-pack">AI/ML Pack</option>
+                            <option value="physics-pack">Physics Pack</option>
                             <option value="nature-pack">Nature Pack</option>
                             <option value="clustering-pack">Clustering Pack</option>
                             <option value="optimization-pack">Optimization Pack</option>
@@ -3778,7 +3865,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     <li><code>presetIncludeCore</code>: boolean — include core rules in batch</li>
                     <li><code>presetCount</code>: number — default count for batch presets</li>
                     <li><code>presetTheme</code>: string — one of <code>any</code>, <code>flash</code>, <code>mouse</code>, <code>click</code>, <code>drag</code>, <code>flow</code>, <code>orbit</code>, <code>edge</code>, <code>trail</code>, <code>color</code>, <code>group</code>, <code>speed</code>, <code>templates</code></li>
-                    <li><code>presetBundle</code>: string — one of <code>none</code>, <code>ai-ml-pack</code>, <code>nature-pack</code>, <code>clustering-pack</code>, <code>optimization-pack</code>, <code>graphs-pack</code>, <code>dimensionality-pack</code>, <code>navigation-pack</code>, <code>generative-pack</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
+                    <li><code>presetBundle</code>: string — one of <code>none</code>, <code>ai-ml-pack</code>, <code>physics-pack</code>, <code>nature-pack</code>, <code>clustering-pack</code>, <code>optimization-pack</code>, <code>graphs-pack</code>, <code>dimensionality-pack</code>, <code>navigation-pack</code>, <code>generative-pack</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
                     <li><code>randomPresets</code>: boolean|number — when true/number, loads random presets on start; number picks that many</li>
                 </ul>
                 <h4>Examples</h4>
@@ -3786,6 +3873,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     <li><code>${urlBase}?presetIncludeCore=false&amp;presetTheme=flash&amp;randomPresets=true</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetCount=6&amp;presetTheme=mouse&amp;randomPresets=6</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetBundle=ai-ml-pack</code></li>
+                    <li><code>${urlBase}?presetIncludeCore=false&amp;presetBundle=physics-pack</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetBundle=nature-pack</code></li>
                     <li><code>${urlBase}?presetIncludeCore=false&amp;presetBundle=clustering-pack</code></li>
                     <li><code>${urlBase}?presetBundle=optimization-pack</code></li>
@@ -4184,8 +4272,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             for (const p of rulePresets) {
                 const name = p.name || '';
                 if (/\(Core\)/i.test(name) || /-core$/.test(p.id)) groups['Core'].push(p);
-                else if (/^(AI|ML|CS)\b|AI\s?[—-]|ML\s?[—-]|CS\s?[—-]/i.test(name)) groups['AI / ML / CS'].push(p);
                 else if (/^Physics\b/i.test(name)) groups['Physics'].push(p);
+                else if (/^(?:AI|ML|CS)(?:\b|\s?[—-])/i.test(name)) groups['AI / ML / CS'].push(p);
                 else if (/^Math\b/i.test(name)) groups['Math'].push(p);
                 else if (/^Nature\b/i.test(name)) groups['Nature'].push(p);
                 else if (/^Visual\b/i.test(name)) groups['Visual'].push(p);
