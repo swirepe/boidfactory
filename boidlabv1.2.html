@@ -2311,7 +2311,9 @@ return new Vector();` },
 // ---- Phase state ----
 if (typeof boid._phase !== 'number') {
   boid._phase = Math.random() * Math.PI * 2;
-  boid._omega = (0.02 + (Math.random()-0.5)*0.01) * (Math.random()<0.5?-1:1);
+  const wBase = (typeof config.kuramotoOmegaBase === 'number') ? config.kuramotoOmegaBase : 0.02;
+  const wJit = (typeof config.kuramotoOmegaJitter === 'number') ? config.kuramotoOmegaJitter : 0.01;
+  boid._omega = (wBase + (Math.random()-0.5)*wJit) * (Math.random()<0.5?-1:1);
 }
 // Neighborhood stats within perception
 const Rp = (config.perceptionRadius||50);
@@ -2326,7 +2328,7 @@ for (const o of neighbors) {
 let R = 0, mu = boid._phase; // local order and mean phase
 if (n>0) { R = Math.min(1, Math.sqrt(sx*sx + sy*sy)/n); mu = Math.atan2(sy, sx); }
 // ---- Phase update (small step) ----
-const K = 0.06; // coupling
+const K = (typeof config.kuramotoK === 'number') ? config.kuramotoK : 0.06; // coupling
 const dtheta = boid._omega + K * R * Math.sin(mu - boid._phase);
 boid._phase = (boid._phase + dtheta + Math.PI*2) % (Math.PI*2);
 
@@ -2390,6 +2392,106 @@ if (typeof api !== 'undefined' && api && api.addDrawable) {
 // Trails intensified by coherence
 if (typeof api !== 'undefined' && api && api.depositTrail) {
   api.depositTrail(boid.pos.x, boid.pos.y, Math.min(1.6, 0.4 + R*0.9));
+}
+
+  return steer.limit(boid.maxForce);` },
+
+          { id: 'novel-reaction-diffusion', name: 'Novel — Reaction‑Diffusion Trails', code: `/**
+  Reaction‑Diffusion Trails (Gray‑Scott Inspired)
+
+  Concept
+  ————
+  Two scalar fields A and B evolve on a coarse grid via Gray‑Scott‑like dynamics.
+  Boids deposit B; A is replenished. Reaction and diffusion carve out living
+  patterns that guide motion: boids drift along B's isocontours and avoid high B.
+
+  Fields (per grid cell)
+  ———————————————
+    A, B
+    A' = A + D * Laplacian(A) - A*B*B + feed*(1 - A)
+    B' = B + D * Laplacian(B) + A*B*B - (kill + feed)*B
+
+  Steering
+  ——————
+    • Edge follow: glide tangentially to ∇B (isocontour following)
+    • Avoid peak: slight push away from high B
+
+  Visuals
+  —————
+    • Additive aurora for B intensity near boid
+    • Faint vector showing tangential drift
+
+  Config
+  —————
+    Uses config.rdFeed, config.rdKill, config.rdDiffusion, config.rdDeposit
+  */
+// Grid sizing (reuse pheromone tiling)
+const cols = pheromones.cols, rows = pheromones.rows, cell = pheromones.cell;
+if (!gameState._rdA || gameState._rdA.length !== cols*rows) {
+  gameState._rdA = new Float32Array(cols*rows);
+  gameState._rdB = new Float32Array(cols*rows);
+  for (let i=0;i<cols*rows;i++) { gameState._rdA[i] = 1.0; gameState._rdB[i] = 0.0; }
+}
+const A = gameState._rdA, B = gameState._rdB;
+const feed = (typeof config.rdFeed==='number'?config.rdFeed:0.037);
+const kill = (typeof config.rdKill==='number'?config.rdKill:0.06);
+const D = (typeof config.rdDiffusion==='number'?config.rdDiffusion:0.95) * 0.2; // small per-frame blend
+const dep = (typeof config.rdDeposit==='number'?config.rdDeposit:0.55);
+
+// Helpers
+function idx(i,j){ return j*cols + i; }
+function clamp(v, lo, hi){ return v<lo?lo:(v>hi?hi:v); }
+
+// Map boid pos to cell
+const ci = clamp(Math.floor(boid.pos.x / cell), 1, cols-2);
+const cj = clamp(Math.floor(boid.pos.y / cell), 1, rows-2);
+// Deposit B at boid; consume A
+const k = idx(ci, cj);
+B[k] = clamp(B[k] + dep*0.02, 0, 1);
+A[k] = clamp(A[k] - dep*0.01, 0, 1);
+
+// Update a tiny 3x3 patch around the boid (stochastic sparse updates per frame)
+for (let dj=-1; dj<=1; dj++) for (let di=-1; di<=1; di++) {
+  const i = ci+di, j=cj+dj; const p = idx(i,j);
+  // 4-neighborhood laplacian (poor-man)
+  const lapA = A[idx(i-1,j)] + A[idx(i+1,j)] + A[idx(i,j-1)] + A[idx(i,j+1)] - 4*A[p];
+  const lapB = B[idx(i-1,j)] + B[idx(i+1,j)] + B[idx(i,j-1)] + B[idx(i,j+1)] - 4*B[p];
+  const a = A[p], b = B[p];
+  const reaction = a*b*b;
+  const a2 = a + D*lapA - reaction + feed*(1-a);
+  const b2 = b + D*lapB + reaction - (kill+feed)*b;
+  A[p] = clamp(a2, 0, 1);
+  B[p] = clamp(b2, 0, 1);
+}
+
+// Compute gradient of B for steering
+const gx = (B[idx(ci+1,cj)] - B[idx(ci-1,cj)]) * 0.5;
+const gy = (B[idx(ci,cj+1)] - B[idx(ci,cj-1)]) * 0.5;
+const grad = new Vector(gx, gy);
+let steer = new Vector();
+if (grad.mag()>1e-6) {
+  const tang = new Vector(-grad.y, grad.x).normalize(); // isocontour direction
+  const glide = tang.mult(boid.maxSpeed*0.6);
+  steer.add(Vector.sub(glide, boid.vel).limit(boid.maxForce*0.7));
+  const away = grad.clone().normalize().mult(boid.maxSpeed*0.25);
+  steer.add(Vector.sub(away, boid.vel).limit(boid.maxForce*0.3));
+}
+
+// Visuals — B aurora and tangential hint
+if (typeof api!=='undefined' && api && api.addDrawable) {
+  const x=boid.pos.x, y=boid.pos.y; const vB=B[k];
+  const hue = (config.hue + Math.floor(180*vB)) % 360; const alpha = (0.08 + vB*0.25).toFixed(3);
+  api.addDrawable((ctx)=>{
+    const r=12+vB*24; const g=ctx.createRadialGradient(x,y,2,x,y,r);
+    g.addColorStop(0, 'hsla(' + hue + ',100%,60%,' + (0.18+vB*0.18).toFixed(3) + ')');
+    g.addColorStop(1, 'hsla(' + hue + ',100%,60%,0.00)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    if (grad.mag()>1e-6) {
+      const tnorm = new Vector(-grad.y, grad.x).normalize();
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+tnorm.x*14, y+tnorm.y*14);
+      ctx.strokeStyle='hsla(' + hue + ',100%,70%,' + alpha + ')'; ctx.lineWidth=1; ctx.stroke();
+    }
+  });
 }
 
 return steer.limit(boid.maxForce);` },
@@ -3411,6 +3513,10 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 presetBundle: 'none',
                 perceptionBlend: true,
                 perceptionBlendRate: 0.08,
+                // Kuramoto Aurora defaults
+                kuramotoK: 0.06,
+                kuramotoOmegaBase: 0.02,
+                kuramotoOmegaJitter: 0.01,
                 rulesSelection: [],
                 configTab: 'settings',
                 ...urlParams
@@ -3836,6 +3942,74 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             // Perception hue blend controls
             createToggle('perceptionBlend', 'Perception Hue Blend', config.perceptionBlend);
             createSlider('perceptionBlendRate', 'Perception Blend Rate', 0, 0.4, 0.01, config.perceptionBlendRate);
+            // Novel rule configuration sections (shown when selected)
+            const novelWrap = document.createElement('div'); novelWrap.id='novel-config-sections'; appendTarget.appendChild(novelWrap);
+            // Helper to toggle visibility based on active editor tab
+            window.updateNovelConfigVisibility = function updateNovelConfigVisibility(){
+                try {
+                    const active = document.querySelector('.tab-button.active');
+                    const activeName = active && active.dataset.tab;
+                    const present = new Set((userFunctions||[]).map(u => u.name));
+                    document.querySelectorAll('#novel-config-sections [data-novel]').forEach(sec => {
+                        const id = sec.dataset.novel;
+                        // show only if the matching rule is present and is the active tab
+                        const shouldShow = !!(activeName && id === activeName && present.has(activeName));
+                        sec.style.display = shouldShow ? '' : 'none';
+                    });
+                } catch(e){}
+            };
+            // Kuramoto Aurora config
+            (function(){
+                const sec = document.createElement('div'); sec.className='config-item'; sec.dataset.novel='novel-kuramoto-aurora'; sec.style.display='none';
+                sec.innerHTML = '<h3>Novel — Kuramoto Aurora</h3>';
+                novelWrap.appendChild(sec);
+                // Inject sliders into this section
+                const mount = (id,label,min,max,step,val)=>{ const item=document.createElement('div'); item.className='config-item'; item.innerHTML='<label for="'+id+'">'+label+'</label>'; const input=document.createElement('input'); input.type='range'; input.min=min; input.max=max; input.step=step; input.value=val; input.id=id; const vs=document.createElement('span'); vs.textContent=' '+Number(val).toFixed(3); input.addEventListener('input',(e)=>{ const v=parseFloat(e.target.value); config[id]=v; vs.textContent=' '+v.toFixed(3); if (config.debug) updateAllURLParams(); }); input.addEventListener('change',(e)=>{ if(!config.debug) updateURL(id, parseFloat(e.target.value));}); item.appendChild(input); item.querySelector('label').appendChild(vs); sec.appendChild(item); };
+                mount('kuramotoK','Kuramoto K (Coupling)',0,0.2,0.005,config.kuramotoK);
+                mount('kuramotoOmegaBase','Kuramoto ω Base',-0.1,0.1,0.001,config.kuramotoOmegaBase);
+                mount('kuramotoOmegaJitter','Kuramoto ω Jitter',0,0.1,0.001,config.kuramotoOmegaJitter);
+                // Randomize ω button
+                const rand = document.createElement('button'); rand.className='bar-btn'; rand.textContent='Randomize ω'; rand.title='Randomize Kuramoto frequencies for all boids';
+                rand.addEventListener('click', () => {
+                    try {
+                        const wBase = (typeof config.kuramotoOmegaBase === 'number') ? config.kuramotoOmegaBase : 0.02;
+                        const wJit = (typeof config.kuramotoOmegaJitter === 'number') ? config.kuramotoOmegaJitter : 0.01;
+                        (gameState.boids||[]).forEach(b => {
+                            b._omega = (wBase + (Math.random()-0.5)*wJit) * (Math.random()<0.5?-1:1);
+                        });
+                        console.log('[Kuramoto] ω randomized for', (gameState.boids||[]).length, 'boids');
+                    } catch(e) { console.warn('Kuramoto ω randomize failed:', e); }
+                });
+                sec.appendChild(rand);
+            })();
+            // Reaction-Diffusion config
+            (function(){
+                const sec = document.createElement('div'); sec.className='config-item'; sec.dataset.novel='novel-reaction-diffusion'; sec.style.display='none';
+                sec.innerHTML = '<h3>Novel — Reaction‑Diffusion</h3>';
+                novelWrap.appendChild(sec);
+                const mount = (id,label,min,max,step,val)=>{ const item=document.createElement('div'); item.className='config-item'; item.innerHTML='<label for="'+id+'">'+label+'</label>'; const input=document.createElement('input'); input.type='range'; input.min=min; input.max=max; input.step=step; input.value=val; input.id=id; const vs=document.createElement('span'); vs.textContent=' '+Number(val).toFixed(3); input.addEventListener('input',(e)=>{ const v=parseFloat(e.target.value); config[id]=v; vs.textContent=' '+v.toFixed(3); if (config.debug) updateAllURLParams(); }); input.addEventListener('change',(e)=>{ if(!config.debug) updateURL(id, parseFloat(e.target.value));}); item.appendChild(input); item.querySelector('label').appendChild(vs); sec.appendChild(item); };
+                // Defaults if not present
+                if (typeof config.rdFeed!=='number') config.rdFeed=0.037;
+                if (typeof config.rdKill!=='number') config.rdKill=0.06;
+                if (typeof config.rdDiffusion!=='number') config.rdDiffusion=0.95;
+                if (typeof config.rdDeposit!=='number') config.rdDeposit=0.55;
+                mount('rdFeed','RD Feed (f)',0.0,0.1,0.001,config.rdFeed);
+                mount('rdKill','RD Kill (k)',0.0,0.1,0.001,config.rdKill);
+                mount('rdDiffusion','RD Diffusion',0.5,1.5,0.01,config.rdDiffusion);
+                mount('rdDeposit','RD Deposit',0.0,1.0,0.01,config.rdDeposit);
+            })();
+            // Ensure initial visibility matches the active rule tab
+            if (typeof updateNovelConfigVisibility === 'function') updateNovelConfigVisibility();
+            // Kuramoto (Aurora Swarm) controls
+            (function(){
+                const hdr = document.createElement('div');
+                hdr.className = 'config-item';
+                hdr.innerHTML = '<h3>Kuramoto Aurora</h3>';
+                appendTarget.appendChild(hdr);
+            })();
+            createSlider('kuramotoK', 'Kuramoto K (Coupling)', 0, 0.2, 0.005, config.kuramotoK);
+            createSlider('kuramotoOmegaBase', 'Kuramoto ω Base', -0.1, 0.1, 0.001, config.kuramotoOmegaBase);
+            createSlider('kuramotoOmegaJitter', 'Kuramoto ω Jitter', 0, 0.1, 0.001, config.kuramotoOmegaJitter);
             
             userFunctions.forEach(fn => {
                  const labelName = fn.displayName ? fn.displayName : (fn.name.charAt(0).toUpperCase() + fn.name.slice(1));
@@ -4215,6 +4389,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     tab.classList.add('active');
                     document.getElementById(tab.dataset.tab).classList.add('active');
                     editors[tab.dataset.tab].refresh();
+                    // Update novel config panels visibility on tab change
+                    if (typeof updateNovelConfigVisibility === 'function') updateNovelConfigVisibility();
                 });
             });
 
@@ -4488,7 +4664,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             bar.appendChild(label);
             const sel = document.createElement('select'); sel.title = 'Presets (grouped by category)';
             const groups = categorizePresets();
-            const order = ['Core', 'Nature', 'AI / ML / CS', 'Physics', 'Math', 'Visual', 'Templates', 'Other'];
+            const order = ['Core', 'Novel', 'Nature', 'AI / ML / CS', 'Physics', 'Math', 'Visual', 'Templates', 'Other'];
             order.forEach(label => {
                 if (!groups[label] || groups[label].length === 0) return;
                 const og = document.createElement('optgroup'); og.label = label;
@@ -4546,10 +4722,11 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         }
 
         function categorizePresets() {
-            const groups = { 'Core': [], 'AI / ML / CS': [], 'Physics': [], 'Math': [], 'Nature': [], 'Visual': [], 'Templates': [], 'Other': [] };
+            const groups = { 'Core': [], 'Novel': [], 'AI / ML / CS': [], 'Physics': [], 'Math': [], 'Nature': [], 'Visual': [], 'Templates': [], 'Other': [] };
             for (const p of rulePresets) {
                 const name = p.name || '';
                 if (/\(Core\)/i.test(name) || /-core$/.test(p.id)) groups['Core'].push(p);
+                else if (/^Novel\b/i.test(name)) groups['Novel'].push(p);
                 else if (/^Physics\b/i.test(name)) groups['Physics'].push(p);
                 else if (/^(?:AI|ML|CS)(?:\b|\s?[—-])/i.test(name)) groups['AI / ML / CS'].push(p);
                 else if (/^Math\b/i.test(name)) groups['Math'].push(p);
@@ -4838,6 +5015,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             for (let i = 1; i < selected.length; i++) addRuleWithPreset(selected[i]);
             if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
             setupConfigUI();
+            // Refresh novel config panel visibility after rules change
+            if (typeof updateNovelConfigVisibility === 'function') updateNovelConfigVisibility();
         }
 
         function applyPresetSelection(ids, includeCore) {
@@ -4845,9 +5024,12 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             const coreIds = new Set(['cohesion-core','alignment-core','separation-core','novel-core']);
             const corePresets = rulePresets.filter(p => coreIds.has(p.id));
             const presetById = Object.fromEntries(rulePresets.map(p => [p.id, p]));
+            // Build a de-duplicated list preserving order: core (optional) then explicit ids
             const selected = [];
-            if (includeCore) selected.push(...corePresets);
-            ids.forEach(id => { const p = presetById[id]; if (p) selected.push(p); });
+            const seen = new Set();
+            const pushUnique = (p) => { if (p && !seen.has(p.id)) { seen.add(p.id); selected.push(p); } };
+            if (includeCore) corePresets.forEach(pushUnique);
+            ids.forEach(id => pushUnique(presetById[id]));
             if (selected.length === 0) return;
             if (userFunctions.length === 0) {
                 addRuleWithPreset(selected[0]);
