@@ -349,12 +349,14 @@
         <button class="overlay-toggle" data-overlay="config-overlay">Config</button>
         <button class="overlay-toggle" data-overlay="stats-overlay">Stats</button>
         <button class="overlay-toggle" data-overlay="help-overlay">Help</button>
+        <button class="overlay-toggle" data-overlay="info-overlay">Info</button>
         <button class="overlay-toggle" id="reset-button" title="Reset simulation (boids + stats)">Reset</button>
     </div>
 
     <div class="overlay" id="config-overlay"></div>
     <div class="overlay" id="stats-overlay"></div>
     <div class="overlay" id="help-overlay"></div>
+    <div class="overlay" id="info-overlay"></div>
 
     <div id="code-pane" class="dock-bottom">
         <button class="code-pane-toggle">
@@ -898,6 +900,47 @@ return mouseForce;`
         // --- RULE PRESETS ---
         // Tastefully documented presets. Each snippet implements the Rule API and returns a Vector.
         const rulePresets = [
+          // Templates — quick starters to illustrate the Drawable API
+          { id: 'template-drawable-ring', name: 'Template — Drawable Ring', code: `/**
+  Drawable Ring (Template)
+  Draws a faint ring at the boid position every frame. No steering.
+  Use: replace visuals or steering to build your own rule.
+  @returns {Vector}
+*/
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x = boid.pos.x, y = boid.pos.y, r = 12;
+  api.addDrawable(function(ctx){
+    ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.strokeStyle = 'hsla(' + (boid.hue) + ',100%,70%,0.18)';
+    ctx.lineWidth = 1; ctx.stroke();
+  });
+}
+return new Vector();` },
+
+          { id: 'template-drawable-streak', name: 'Template — Drawable Streak', code: `/**
+  Drawable Streak (Template)
+  Draws a short line along current velocity; minimal forward bias.
+  @returns {Vector}
+*/
+const v = boid.vel.clone().normalize().mult(10);
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x = boid.pos.x, y = boid.pos.y;
+  api.addDrawable(function(ctx){
+    ctx.beginPath(); ctx.moveTo(x - v.x, y - v.y); ctx.lineTo(x, y);
+    ctx.strokeStyle = 'hsla(' + (boid.hue) + ',100%,70%,0.25)'; ctx.lineWidth = 1.5; ctx.stroke();
+  });
+}
+return v.mult(0.001);` },
+
+          { id: 'template-trail-heatmap', name: 'Template — Trail Heatmap', code: `/**
+  Trail Heatmap (Template)
+  Deposits into the pheromone grid to leave fading trails.
+  @returns {Vector}
+*/
+if (typeof api !== 'undefined' && api && api.depositTrail) {
+  api.depositTrail(boid.pos.x, boid.pos.y, 1.0);
+}
+return new Vector();` },
           // Core rules
           { id: 'cohesion-core', name: 'Cohesion (Core)', code: defaultFunctionsCode.cohesion },
           { id: 'alignment-core', name: 'Alignment (Core)', code: defaultFunctionsCode.alignment },
@@ -2005,6 +2048,7 @@ return u.mult(0.002);` },
             setupConfigUI();
             setupStatsUI();
             setupHelpUI();
+            setupInfoUI();
         }
 
         function applyDockMode(mode) {
@@ -2292,6 +2336,40 @@ return u.mult(0.002);` },
             container.querySelector('.close-button').onclick = () => container.classList.remove('visible');
         }
 
+        function setupInfoUI() {
+            const container = document.getElementById('info-overlay');
+            if (!container) return;
+            container.innerHTML = '<button class="close-button">&times;</button>' +
+              '<h2>Technical Info</h2>' +
+              '<h3>Rule Function Signature</h3>' +
+              '<pre style="white-space:pre-wrap;font-size:12px;line-height:1.4">' +
+              'function rule(boid, gameState, neighbors, config, mouse, Vector, api) {\n' +
+              '  // Return a Vector steering force.\n' +
+              '  // Optionally draw visuals via api.addDrawable() or deposit trails via api.depositTrail().\n' +
+              '  return new Vector(0,0);\n' +
+              '}' +
+              '</pre>' +
+              '<h3>Rule API</h3>' +
+              '<ul>' +
+              '<li><code>api.addDrawable((ctx, gameState) =&gt; {...})</code>: enqueue a canvas draw for this frame.</li>' +
+              '<li><code>api.depositTrail(x, y, amount=1)</code>: add to pheromone grid (fading heatmap).</li>' +
+              '</ul>' +
+              '<h3>Render Pipeline (per frame)</h3>' +
+              '<ol>' +
+              '<li>update(): build quadtree, decay pheromones, run rules (which can register drawables).</li>' +
+              '<li>draw(): background, pheromone heatmap, quadtree (optional), boids, custom drawables, HUD.</li>' +
+              '</ol>' +
+              '<h3>Visual Density</h3>' +
+              '<p><code>config.visualDensity</code> in [0,2]: if &lt;1, visuals are probabilistically thinned; if &gt;1, some visuals are duplicated to increase density.</p>' +
+              '<h3>Performance Notes</h3>' +
+              '<ul><li>Prefer simple strokes/fills; avoid large loops in each drawable.</li>' +
+              '<li>Use density slider for heavy visuals; avoid synchronous layout reads in drawables.</li>' +
+              '</ul>' +
+              '<h3>Coordinate System</h3>' +
+              '<p>Origin at top-left; +x to right, +y down. Boids wrap at edges.</p>';
+            container.querySelector('.close-button').onclick = () => container.classList.remove('visible');
+        }
+
         function setupCodePane() {
             const tabs = document.querySelectorAll('.tab-button');
             const contents = document.querySelectorAll('.tab-content');
@@ -2575,7 +2653,7 @@ return u.mult(0.002);` },
             bar.appendChild(label);
             const sel = document.createElement('select'); sel.title = 'Presets (grouped by category)';
             const groups = categorizePresets();
-            const order = ['Core', 'Nature', 'AI / ML / CS', 'Physics', 'Math', 'Visual', 'Other'];
+            const order = ['Templates', 'Core', 'Nature', 'AI / ML / CS', 'Physics', 'Math', 'Visual', 'Other'];
             order.forEach(label => {
                 if (!groups[label] || groups[label].length === 0) return;
                 const og = document.createElement('optgroup'); og.label = label;
@@ -2626,10 +2704,11 @@ return u.mult(0.002);` },
         }
 
         function categorizePresets() {
-            const groups = { 'Core': [], 'Nature': [], 'AI / ML / CS': [], 'Physics': [], 'Math': [], 'Visual': [], 'Other': [] };
+            const groups = { 'Templates': [], 'Core': [], 'Nature': [], 'AI / ML / CS': [], 'Physics': [], 'Math': [], 'Visual': [], 'Other': [] };
             for (const p of rulePresets) {
                 const name = p.name || '';
-                if (/\(Core\)/i.test(name) || /-core$/.test(p.id)) groups['Core'].push(p);
+                if (/^Template\b|^Drawable Template\b/i.test(name)) groups['Templates'].push(p);
+                else if (/\(Core\)/i.test(name) || /-core$/.test(p.id)) groups['Core'].push(p);
                 else if (/^Nature\b/i.test(name)) groups['Nature'].push(p);
                 else if (/^(AI|CS)\b|AI —|AI\s—|AI\s-/i.test(name)) groups['AI / ML / CS'].push(p);
                 else if (/^Physics\b/i.test(name)) groups['Physics'].push(p);
