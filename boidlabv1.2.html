@@ -519,7 +519,14 @@
                 const i = cy * pheromones.cols + cx;
                 if (i >= 0 && i < pheromones.grid.length) pheromones.grid[i] += amount;
             },
-            addDrawable(fn) { if (typeof fn === 'function') drawables.push(fn); }
+            addDrawable(fn) {
+                if (typeof fn !== 'function') return;
+                const d = Math.max(0, Math.min(2, typeof config.visualDensity === 'number' ? config.visualDensity : 1));
+                // If d < 1, probabilistically skip; if d > 1, occasionally duplicate for richness
+                if (d < 1 && Math.random() > d) return;
+                drawables.push(fn);
+                if (d > 1 && Math.random() < (d - 1)) drawables.push(fn);
+            }
         };
 
         const mouse = {
@@ -1894,6 +1901,7 @@ return u.mult(0.002);` },
                 hue: 200, boidCount: 200, maxSpeed: 3, maxForce: 0.2,
                 perceptionRadius: 50, visualizeQuadtree: true, debug: false,
                 cohesionWeight: 1.0, separationWeight: 1.5, alignmentWeight: 1.0, novelWeight: 1.2,
+                visualDensity: 1.0,
                 boidShape: 'triangle', boidSize: 10, boidSizeVariance: 2,
                 header: "Boids Simulation", subheader: "Click and drag to interact",
                 codePaneDock: 'bottom', // bottom | left | max
@@ -2183,6 +2191,7 @@ return u.mult(0.002);` },
             createSlider('maxSpeed', 'Max Speed', 0.5, 10, 0.1, config.maxSpeed);
             createSlider('maxForce', 'Max Force', 0.01, 1, 0.01, config.maxForce);
             createSlider('perceptionRadius', 'Perception', 10, 200, 1, config.perceptionRadius);
+            createSlider('visualDensity', 'Visual Density', 0, 2, 0.05, config.visualDensity);
             
             userFunctions.forEach(fn => {
                  createSlider(`${fn.name}Weight`, `${fn.name.charAt(0).toUpperCase() + fn.name.slice(1)} Weight`, 0, 5, 0.1, config[`${fn.name}Weight`]);
@@ -2912,7 +2921,7 @@ return u.mult(0.002);` },
             // Custom rule drawables (if any)
             if (drawables.length) {
                 for (const fn of drawables) {
-                    try { fn(ctx, gameState); } catch (e) { /* ignore */ }
+                    try { fn(ctx, gameState); } catch (e) { console.log(e) }
                 }
             }
             if (mouse.down) {
@@ -2934,6 +2943,16 @@ return u.mult(0.002);` },
             ctx.fillText(config.header, gameState.width / 2, 50);
             ctx.font = '24px sans-serif';
             ctx.fillText(config.subheader, gameState.width / 2, 90);
+
+            // Debug: show number of drawables this frame (enable with ?debug=true)
+            if (config.debug) {
+                ctx.save();
+                ctx.textAlign = 'left';
+                ctx.fillStyle = '#ccc';
+                ctx.font = '12px monospace';
+                ctx.fillText(`drawables: ${drawables.length}`, 10, 18);
+                ctx.restore();
+            }
         }
 
         function updateStats(updateTime) {
