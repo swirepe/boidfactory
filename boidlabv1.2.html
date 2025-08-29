@@ -2159,6 +2159,9 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                 codePaneLeftWidth: null,
                 splitLeftRule: 'cohesion',
                 splitRightRule: 'separation',
+                // Preset controls — persisted via URL
+                presetIncludeCore: true,
+                presetCount: 4,
                 ...urlParams
             };
             logConfig('Initial config:', config);
@@ -2170,6 +2173,19 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
             );
             setupUI();
             setupCodePane();
+            // If requested via URL, load random presets at startup
+            if (typeof urlParams !== 'undefined' && urlParams) {
+                const rp = urlParams.randomPresets;
+                if (rp !== undefined && rp !== false && rp !== 'false') {
+                    let n = 4;
+                    if (typeof rp === 'number') {
+                        n = Math.max(1, Math.min(rulePresets.length, rp));
+                    } else if (typeof urlParams.presetCount === 'number') {
+                        n = Math.max(1, Math.min(rulePresets.length, urlParams.presetCount));
+                    }
+                    resetRulesWithPresets(n, !!config.presetIncludeCore);
+                }
+            }
             applyDockMode(config.codePaneDock);
             createBoids();
             window.addEventListener('resize', debounce(setupCanvas, 250));
@@ -2469,10 +2485,10 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                 <h3>Rule Presets</h3>
                 <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                     <label>Count
-                        <input type="number" id="preset-count" min="1" max="${Math.max(4, rulePresets.length)}" value="4"
+                        <input type="number" id="preset-count" min="1" max="${Math.max(4, rulePresets.length)}" value="${(config.presetCount ?? 4)}"
                             style="width:72px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
                     </label>
-                    <label><input type="checkbox" id="preset-include-core" checked> Include core rules</label>
+                    <label><input type="checkbox" id="preset-include-core" ${config.presetIncludeCore ? 'checked' : ''}> Include core rules</label>
                     <button id="preset-reset-btn" style="background: var(--primary-color); color: #fff; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono);">Reset with Presets</button>
                 </div>
             `;
@@ -2483,8 +2499,31 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                 const includeCoreEl = presetsBox.querySelector('#preset-include-core');
                 const n = Math.max(1, Math.min(rulePresets.length, parseInt(countEl.value || '1', 10)));
                 const includeCore = !!includeCoreEl.checked;
+                // Mirror Count into URL immediately on reset click
+                config.presetCount = n;
+                if (config.debug) updateAllURLParams(); else updateURL('presetCount', config.presetCount);
                 resetRulesWithPresets(n, includeCore);
             });
+            // Persist "Include core rules" toggle in URL
+            const includeCoreEl = presetsBox.querySelector('#preset-include-core');
+            if (includeCoreEl) {
+                includeCoreEl.checked = !!config.presetIncludeCore;
+                includeCoreEl.addEventListener('change', e => {
+                    config.presetIncludeCore = !!e.target.checked;
+                    if (config.debug) updateAllURLParams(); else updateURL('presetIncludeCore', config.presetIncludeCore);
+                });
+            }
+            // Persist preset count to URL
+            const countEl = presetsBox.querySelector('#preset-count');
+            if (countEl) {
+                countEl.value = String(config.presetCount ?? 4);
+                countEl.addEventListener('change', e => {
+                    const val = parseInt(e.target.value || '4', 10);
+                    const n = Math.max(1, Math.min(rulePresets.length, isNaN(val) ? 4 : val));
+                    config.presetCount = n;
+                    if (config.debug) updateAllURLParams(); else updateURL('presetCount', config.presetCount);
+                });
+            }
             
             const createToggle = (id, label, value) => {
                 const item = document.createElement('div');
@@ -2553,7 +2592,42 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
         
         function setupHelpUI() {
             const container = document.getElementById('help-overlay');
-            container.innerHTML = `<button class="close-button">&times;</button><h2>Boids Simulation</h2> <p>This is an interactive simulation of flocking behavior, inspired by Craig Reynolds' Boids algorithm.</p> <h3>Configuration</h3> <p>All configuration options are available as URL parameters.</p> <ul><li><b>boidCount, boidSize, boidSizeVariance, boidShape</b></li><li><b>maxSpeed, maxForce, perceptionRadius</b></li><li><b>cohesionWeight, separationWeight, etc.</b></li><li><b>visualizeQuadtree, debug, hue</b></li></ul> <h3>Change Log</h3><p>v1.7 - Added visual success/error indicators for live code reloading.<br>v1.6 - Added boid shape/size configs and monospace font styling.<br>v1.5 - Added beautiful mean direction polar chart with togglable stdev bands.<br>v1.4 - Added close buttons and expanded statistics panel.<br>v1.3 - Fixed critical scope error for dynamic code.<br>v1.2 - Added dynamic polar spiral graph for flock coherence.<br>v1.1 - Fixed critical errors related to dynamic function creation.<br>v1.0 - Initial implementation.</p>`;
+            const urlBase = window.location.pathname;
+            container.innerHTML = `
+                <button class="close-button">&times;</button>
+                <h2>Boids Simulation</h2>
+                <p>This is an interactive simulation of flocking behavior, inspired by Craig Reynolds' Boids algorithm.</p>
+                <h3>URL Parameters</h3>
+                <p>Most settings persist via the URL. Values are JSON-parsed, so booleans and numbers work as expected.</p>
+                <ul>
+                    <li><code>hue</code>: number (theme hue)</li>
+                    <li><code>boidCount</code>, <code>boidSize</code>, <code>boidSizeVariance</code>, <code>boidShape</code> (triangle|circle|oval|ring)</li>
+                    <li><code>maxSpeed</code>, <code>maxForce</code>, <code>perceptionRadius</code>, <code>visualDensity</code></li>
+                    <li><code>cohesionWeight</code>, <code>separationWeight</code>, <code>alignmentWeight</code>, <code>novelWeight</code></li>
+                    <li><code>visualizeQuadtree</code>: boolean, <code>debug</code>: boolean</li>
+                    <li><code>codePaneDock</code>: bottom|left|max, <code>codePaneLeftWidth</code>: number</li>
+                    <li><code>splitLeftRule</code>, <code>splitRightRule</code>: rule IDs</li>
+                    <li><code>presetIncludeCore</code>: boolean — include core rules in batch</li>
+                    <li><code>presetCount</code>: number — default count for batch presets</li>
+                    <li><code>randomPresets</code>: boolean|number — when true/number, loads random presets on start; number picks that many</li>
+                </ul>
+                <h4>Examples</h4>
+                <ul>
+                    <li><code>${urlBase}?presetIncludeCore=false&amp;randomPresets=true</code></li>
+                    <li><code>${urlBase}?presetIncludeCore=true&amp;presetCount=6&amp;randomPresets=6</code></li>
+                    <li><code>${urlBase}?debug=true&amp;hue=320&amp;boidCount=300</code></li>
+                </ul>
+                <h3>Change Log</h3>
+                <p>
+                    v1.7 - Added visual success/error indicators for live code reloading.<br>
+                    v1.6 - Added boid shape/size configs and monospace font styling.<br>
+                    v1.5 - Added beautiful mean direction polar chart with togglable stdev bands.<br>
+                    v1.4 - Added close buttons and expanded statistics panel.<br>
+                    v1.3 - Fixed critical scope error for dynamic code.<br>
+                    v1.2 - Added dynamic polar spiral graph for flock coherence.<br>
+                    v1.1 - Fixed critical errors related to dynamic function creation.<br>
+                    v1.0 - Initial implementation.
+                </p>`;
             container.querySelector('.close-button').onclick = () => container.classList.remove('visible');
         }
 
