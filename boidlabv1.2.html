@@ -533,6 +533,8 @@
 
         const mouse = {
             pos: { x: -1000, y: -1000 },
+            prev: { x: -1000, y: -1000 },
+            vel: { x: 0, y: 0 },
             down: false,
             clickEffect: null
         };
@@ -2001,6 +2003,144 @@ return new Vector();` },
 */
 const u=boid.vel.clone().normalize(); if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.2){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+20)%360)) + ',100%,70%,0.16)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x-u.x*6,y-u.y*6); ctx.lineTo(x-u.x*2,y-u.y*2); ctx.stroke(); ctx.strokeStyle='hsla(' + (((config.hue+200)%360)) + ',100%,70%,0.12)'; ctx.beginPath(); ctx.moveTo(x-u.x*10,y-u.y*10); ctx.lineTo(x-u.x*6,y-u.y*6); ctx.stroke();}); }
 return u.mult(0.002);` },
+
+          // ——— Interaction‑Driven (Clicks/Drags) ———
+          { id: 'click-gravity-well-strong', name: 'Click — Gravity Well (Strong)', code: `/**
+  Gravity Well (Strong)
+  When mouse is down, pull boids strongly toward the cursor with 1/r falloff.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const toM = Vector.sub(mp, boid.pos);
+const d = Math.max(1, toM.mag());
+const force = toM.normalize().mult(boid.maxSpeed * Math.min(1.5, 120 / d));
+// Visual
+if (typeof api !== 'undefined' && api && api.addDrawable) { const x=mp.x,y=mp.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y,80,0,Math.PI*2); ctx.strokeStyle='hsla(' + (config.hue) + ',100%,65%,0.12)'; ctx.lineWidth=1; ctx.stroke(); }); }
+return Vector.sub(force, boid.vel).limit(boid.maxForce * 2.0);` },
+
+          { id: 'click-explosion', name: 'Click — Explosion', code: `/**
+  Explosion
+  Strong outward impulse away from mouse when pressed.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const away = Vector.sub(boid.pos, mp); const d = Math.max(1, away.mag());
+const magnitude = Math.min(2.2, 160 / d);
+const desired = away.normalize().mult(boid.maxSpeed * magnitude);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 2.5);` },
+
+          { id: 'click-vortex-strong', name: 'Click — Vortex (Strong)', code: `/**
+  Vortex (Strong)
+  Combines tangential spin with mild inward pull around the mouse when pressed.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const toM = Vector.sub(mp, boid.pos); const d = Math.max(1, toM.mag());
+const tang = new Vector(-toM.y, toM.x).normalize();
+const desired = tang.mult(boid.maxSpeed * 1.1).add(toM.normalize().mult(boid.maxSpeed * 0.25));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 2.0);` },
+
+          { id: 'click-brake-zone', name: 'Click — Brake Zone', code: `/**
+  Brake Zone
+  Boids near the cursor are rapidly braked (anti-velocity) while mouse is down.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y); const dist = Vector.dist(boid.pos, mp);
+if (dist > 120) return new Vector();
+const brake = boid.vel.clone().mult(-1.0);
+return brake.limit(boid.maxForce * 2.0);` },
+
+          { id: 'click-speed-boost', name: 'Click — Speed Boost', code: `/**
+  Speed Boost
+  Boids near the cursor get a forward push along their heading.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y); const dist = Vector.dist(boid.pos, mp);
+if (dist > 140) return new Vector();
+const boost = boid.vel.clone().normalize().mult(boid.maxSpeed * 0.9);
+return Vector.sub(boost, boid.vel).limit(boid.maxForce * 1.8);` },
+
+          { id: 'drag-wind-gust', name: 'Drag — Wind Gust', code: `/**
+  Wind Gust
+  While dragging, apply a directional wind along mouse velocity, stronger near the cursor.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const w = new Vector(mouse.vel.x || 0, mouse.vel.y || 0);
+if (w.mag() < 0.1) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const d = Math.max(1, Vector.dist(boid.pos, mp));
+const desired = w.normalize().mult(boid.maxSpeed * Math.min(1.2, 180 / d));
+// Visual
+if (typeof api !== 'undefined' && api && api.addDrawable) { const x=mp.x,y=mp.y, L=24; const mag=Math.max(1e-6, desired.mag()); const ux=desired.x/mag*L, uy=desired.y/mag*L; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+ux,y+uy); ctx.strokeStyle='hsla(' + (config.hue) + ',100%,70%,0.16)'; ctx.lineWidth=2; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 2.2);` },
+
+          { id: 'drag-barrier-repel', name: 'Drag — Barrier Repel', code: `/**
+  Barrier Repel
+  Treat the short segment from previous to current mouse position as a barrier; boids near it are repelled.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const ax = mouse.prev.x, ay = mouse.prev.y, bx = mouse.pos.x, by = mouse.pos.y;
+const abx = bx - ax, aby = by - ay; const ab2 = abx*abx + aby*aby;
+if (ab2 < 25) return new Vector();
+// Project boid onto segment
+const apx = boid.pos.x - ax, apy = boid.pos.y - ay;
+let t = (apx*abx + apy*aby) / ab2; t = Math.max(0, Math.min(1, t));
+const cx = ax + abx * t, cy = ay + aby * t;
+const dx = boid.pos.x - cx, dy = boid.pos.y - cy; const dist2 = dx*dx + dy*dy;
+if (dist2 > 900) return new Vector();
+const n = new Vector(dx, dy).normalize();
+const desired = n.mult(boid.maxSpeed * Math.min(1.5, 300 / Math.sqrt(dist2 + 1)));
+// Visual
+if (typeof api !== 'undefined' && api && api.addDrawable) { const x1=ax,y1=ay,x2=bx,y2=by; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.strokeStyle='hsla(' + (config.hue) + ',100%,60%,0.15)'; ctx.lineWidth=2; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 2.0);` },
+
+          { id: 'drag-line-tractor', name: 'Drag — Line Tractor', code: `/**
+  Line Tractor
+  Attract boids toward the dragged segment (previous → current mouse pos); stronger when closer.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const ax = mouse.prev.x, ay = mouse.prev.y, bx = mouse.pos.x, by = mouse.pos.y;
+const abx = bx - ax, aby = by - ay; const ab2 = abx*abx + aby*aby;
+if (ab2 < 25) return new Vector();
+const apx = boid.pos.x - ax, apy = boid.pos.y - ay; let t = (apx*abx + apy*aby)/ab2; t = Math.max(0, Math.min(1, t));
+const cx = ax + abx*t, cy = ay + aby*t;
+const toLine = new Vector(cx - boid.pos.x, cy - boid.pos.y); const d = Math.max(1, toLine.mag());
+const desired = toLine.normalize().mult(boid.maxSpeed * Math.min(1.5, 240 / d));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 2.0);` },
+
+          { id: 'drag-shear-field', name: 'Drag — Shear Field', code: `/**
+  Shear Field
+  While dragging, push boids perpendicular to mouse velocity, scaled by distance from the cursor line.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const v = new Vector(mouse.vel.x || 0, mouse.vel.y || 0); if (v.mag() < 0.1) return new Vector();
+const tangent = v.clone().normalize(); const normal = new Vector(-tangent.y, tangent.x);
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const rel = Vector.sub(boid.pos, mp);
+const side = Math.sign(rel.x*normal.x + rel.y*normal.y) || 1;
+const dist = Math.abs(rel.x*normal.x + rel.y*normal.y);
+const desired = normal.mult(side * boid.maxSpeed * Math.min(1.2, 180 / Math.max(20, dist)));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 2.0);` },
+
+          { id: 'click-implosion', name: 'Click — Implosion', code: `/**
+  Implosion
+  Strong inward pull near the cursor; very high near-field intensity.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const toM = Vector.sub(mp, boid.pos); const d = Math.max(1, toM.mag());
+const desired = toM.normalize().mult(boid.maxSpeed * Math.min(2.4, 240 / d));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
         ];
 
         // --- INITIALIZATION ---
@@ -2033,12 +2173,25 @@ return u.mult(0.002);` },
             applyDockMode(config.codePaneDock);
             createBoids();
             window.addEventListener('resize', debounce(setupCanvas, 250));
-            canvas.addEventListener('mousemove', e => { mouse.pos.x = e.clientX; mouse.pos.y = e.clientY; });
+            canvas.addEventListener('mousemove', e => {
+                const px = mouse.pos.x, py = mouse.pos.y;
+                mouse.prev.x = px; mouse.prev.y = py;
+                mouse.pos.x = e.clientX; mouse.pos.y = e.clientY;
+                // Simple smoothing on mouse velocity
+                mouse.vel.x = (mouse.pos.x - px) * 0.6 + mouse.vel.x * 0.4;
+                mouse.vel.y = (mouse.pos.y - py) * 0.6 + mouse.vel.y * 0.4;
+            });
             canvas.addEventListener('mousedown', e => { mouse.down = true; });
             canvas.addEventListener('mouseup', e => { mouse.down = false; });
             canvas.addEventListener('touchstart', e => { mouse.down = true; updateTouchPos(e); }, {passive: false});
             canvas.addEventListener('touchend', e => { mouse.down = false; });
-            canvas.addEventListener('touchmove', e => { e.preventDefault(); updateTouchPos(e); }, {passive: false});
+            canvas.addEventListener('touchmove', e => { e.preventDefault();
+                const oldx = mouse.pos.x, oldy = mouse.pos.y;
+                updateTouchPos(e);
+                mouse.prev.x = oldx; mouse.prev.y = oldy;
+                mouse.vel.x = (mouse.pos.x - oldx) * 0.6 + mouse.vel.x * 0.4;
+                mouse.vel.y = (mouse.pos.y - oldy) * 0.6 + mouse.vel.y * 0.4;
+            }, {passive: false});
             lastTime = performance.now();
             animate();
         }
@@ -2914,28 +3067,32 @@ return u.mult(0.002);` },
 
         function resetRulesWithPresets(n, includeCore) {
             const coreIds = new Set(['cohesion-core','alignment-core','separation-core','novel-core']);
-            const pool = rulePresets.filter(p => includeCore || !coreIds.has(p.id));
-            if (pool.length === 0) return;
-            // Randomize pool
-            const arr = pool.slice();
-            for (let i = arr.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [arr[i], arr[j]] = [arr[j], arr[i]]; }
-            const pick = arr.slice(0, Math.max(1, Math.min(n, arr.length)));
-            // Keep or create one base rule, then replace it and delete others
+            const corePresets = rulePresets.filter(p => coreIds.has(p.id));
+            const nonCorePresets = rulePresets.filter(p => !coreIds.has(p.id));
+            // Shuffle helper
+            const shuffle = (arr) => { const a = arr.slice(); for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
+            // Build final selection: [core (optional)] + N random non-core
+            const selected = [];
+            if (includeCore) selected.push(...corePresets);
+            const picks = shuffle(nonCorePresets).slice(0, Math.max(0, Math.min(n, nonCorePresets.length)));
+            selected.push(...picks);
+            if (selected.length === 0) return;
+            // Replace current rules with selected list (first replaces first rule; others added; rest deleted)
             if (userFunctions.length === 0) {
-                addRuleWithPreset(pick[0]);
+                addRuleWithPreset(selected[0]);
             } else {
-                // Fill first existing with first preset and rename
+                // Replace first
                 const first = userFunctions[0].name;
                 const ed = editors[first];
-                if (ed) ed.setValue(pick[0].code);
-                const targetName = sanitizeRuleName(pick[0].name);
+                if (ed) ed.setValue(selected[0].code);
+                const targetName = sanitizeRuleName(selected[0].name);
                 if (first !== targetName) renameRule(first, targetName);
-                // Delete all others
+                // Delete all others for a clean slate
                 const others = userFunctions.slice(1).map(u => u.name);
                 others.forEach(nm => deleteRule(nm));
             }
-            // Add remaining selections
-            for (let i = 1; i < pick.length; i++) addRuleWithPreset(pick[i]);
+            // Add remaining selections in order
+            for (let i = 1; i < selected.length; i++) addRuleWithPreset(selected[i]);
             // Rebuild UI bits
             if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
             setupConfigUI();
