@@ -1747,6 +1747,11 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 if (mounted[L] !== 'left') mountRule(L, 'left');
                 if (mounted[R] !== 'right') mountRule(R, 'right');
                 applySplitRatio();
+                // Ensure both panes are visible (fallback to a different rule if same)
+                if (L === R) {
+                    const other = userFunctions.find(u => u.name !== L);
+                    if (other) { rightSel.value = other.name; mountRule(other.name, 'right'); }
+                }
             }
             function showSplitUI(show) {
                 const sc = document.getElementById('split-controls');
@@ -1830,33 +1835,39 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             // Fill button
             const fill = document.createElement('button'); fill.className='bar-btn'; fill.title='Fill with preset'; fill.textContent='Fill';
             fill.addEventListener('click', () => {
+                const currentName = bar.closest('.tab-content')?.id;
                 const p = rulePresets.find(x => x.id === sel.value) || rulePresets[0];
-                const ed = editors[ruleName]; if (ed && p) ed.setValue(p.code);
-                // If rule is still custom, rename to preset name
-                if (/^custom(\-\d+)?$/.test(ruleName)) {
-                    const newName = sanitizeRuleName(p.name);
-                    renameRule(ruleName, newName);
+                if (!currentName || !p) return;
+                const ed = editors[currentName]; if (ed) ed.setValue(p.code);
+                // Always rename to the preset name for clarity (ensure unique)
+                const targetName = sanitizeRuleName(p.name);
+                if (currentName !== targetName) {
+                    renameRule(currentName, targetName);
                 }
             });
             bar.appendChild(fill);
             // Rename button
             const ren = document.createElement('button'); ren.className='bar-btn'; ren.title='Rename rule'; ren.textContent='Rename';
             ren.addEventListener('click', () => {
-                const newName = prompt(`Rename rule '${ruleName}' to:`, ruleName);
-                if (newName && newName !== ruleName) renameRule(ruleName, newName);
+                const currentName = bar.closest('.tab-content')?.id;
+                if (!currentName) return;
+                const newName = prompt(`Rename rule '${currentName}' to:`, currentName);
+                if (newName && newName !== currentName) renameRule(currentName, newName);
             });
             bar.appendChild(ren);
             // Delete button
             const del = document.createElement('button'); del.className='bar-btn'; del.title='Delete rule'; del.textContent='Delete';
             del.addEventListener('click', () => {
+                const currentName = bar.closest('.tab-content')?.id;
+                if (!currentName) return;
                 if (userFunctions.length <= 1) { alert('At least one rule is required.'); return; }
-                if (!confirm(`Delete rule '${ruleName}'? This cannot be undone.`)) return;
-                deleteRule(ruleName);
+                if (!confirm(`Delete rule '${currentName}'? This cannot be undone.`)) return;
+                deleteRule(currentName);
             });
             bar.appendChild(del);
             // New rule button (local convenience)
             const add = document.createElement('button'); add.className='bar-btn'; add.title='New rule'; add.textContent='New';
-            add.addEventListener('click', () => addRule('custom'));
+            add.addEventListener('click', () => addRule());
             bar.appendChild(add);
             return bar;
         }
@@ -1879,8 +1890,13 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         }
 
         function addRule(nameRaw) {
-            const base = /^custom(\-\d+)?$/.test(nameRaw) ? nameRaw : 'custom';
-            const name = sanitizeRuleName(base);
+            // Choose a preset for the new rule and use its name as the rule name
+            if (typeof config._nextPresetIdx !== 'number') config._nextPresetIdx = 0;
+            const preset = rulePresets[config._nextPresetIdx % rulePresets.length];
+            config._nextPresetIdx++;
+            const baseName = sanitizeRuleName(preset?.name || 'custom');
+            let name = baseName;
+            let i = 2; while (userFunctions.find(u => u.name === name)) { name = `${baseName}-${i++}`; }
             if (userFunctions.find(u => u.name === name)) { alert('Rule already exists.'); return; }
             // Create tab and content
             const tabsBar = document.querySelector('.code-tabs');
@@ -1904,8 +1920,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
                 tabBtn.classList.add('active'); content.classList.add('active'); ed.refresh();
             });
-            // Set default code (preset) and compile
-            ed.setValue(defaultRuleTemplate());
+            // Set code from chosen preset and compile; rename already set to preset name
+            if (preset && preset.code) ed.setValue(preset.code); else ed.setValue('return new Vector();');
             const updateFunction = debounce((editor) => {
                 const tabButton = tabBtn;
                 try {
