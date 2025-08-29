@@ -64,3 +64,4 @@
  - Codex CLI Agent — signed on 2025-08-28, added fade/slide transitions for temporary Code overlay button.
  - Codex CLI Agent — signed on 2025-08-28, clarified rule API/scope in example code and added CodeMirror autocomplete.
  - Codex CLI Agent — signed on 2025-08-28, enriched rule docs with JSDoc and dynamic config-key hints.
+ - Codex CLI Agent — signed on 2025-08-28, added JSDoc typedefs for Vector, Boid, GameState, Mouse, Config, and RuleFunction.

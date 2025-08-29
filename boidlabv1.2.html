@@ -361,6 +361,57 @@
     (() => {
         'use strict';
 
+        /**
+         * Typedefs to clarify rule API, in-scope vars, and common shapes.
+         * These help autocomplete and readability in the embedded editors.
+         */
+        /**
+         * @typedef {Object} Vector
+         * @property {number} x
+         * @property {number} y
+         * @property {(v: Vector) => Vector} add
+         * @property {(v: Vector) => Vector} sub
+         * @property {(s: number) => Vector} mult
+         * @property {(s: number) => Vector} div
+         * @property {() => number} mag
+         * @property {() => Vector} normalize
+         * @property {(max: number) => Vector} limit
+         * @property {() => number} heading
+         * @property {() => Vector} clone
+         */
+        /** @typedef {{pos: Vector, vel: Vector, acc: Vector, maxSpeed: number, maxForce: number, hue: number, size: number, update: (gs: GameState) => void, draw: (ctx: CanvasRenderingContext2D) => void}} Boid */
+        /** @typedef {{boids: Boid[], quadtree: any, width: number, height: number}} GameState */
+        /** @typedef {{pos: {x: number, y: number}, down: boolean}} Mouse */
+        /**
+         * @typedef {Object} Config
+         * @property {number} hue
+         * @property {number} boidCount
+         * @property {number} maxSpeed
+         * @property {number} maxForce
+         * @property {number} perceptionRadius
+         * @property {boolean} visualizeQuadtree
+         * @property {boolean} debug
+         * @property {number} cohesionWeight
+         * @property {number} separationWeight
+         * @property {number} alignmentWeight
+         * @property {number} novelWeight
+         * @property {'triangle'|'circle'|'oval'|'ring'} boidShape
+         * @property {number} boidSize
+         * @property {number} boidSizeVariance
+         * @property {string} header
+         * @property {string} subheader
+         */
+        /**
+         * @callback RuleFunction
+         * @param {Boid} boid
+         * @param {GameState} gameState
+         * @param {Boid[]} neighbors
+         * @param {Config} config
+         * @param {Mouse} mouse
+         * @param {typeof Vector} Vector
+         * @returns {Vector}
+         */
+
         // --- GLOBAL STATE & CONSTANTS ---
         const canvas = document.getElementById('boids-canvas');
         const ctx = canvas.getContext('2d');
