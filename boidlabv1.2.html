@@ -3597,6 +3597,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                             <option value="mouse">Mouse</option>
                             <option value="click">Click</option>
                             <option value="drag">Drag</option>
+                            <option value="physics">Physics</option>
                             <option value="flow">Flow</option>
                             <option value="orbit">Orbit</option>
                             <option value="edge">Edge</option>
@@ -3864,7 +3865,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     <li><code>splitLeftRule</code>, <code>splitRightRule</code>: rule IDs</li>
                     <li><code>presetIncludeCore</code>: boolean — include core rules in batch</li>
                     <li><code>presetCount</code>: number — default count for batch presets</li>
-                    <li><code>presetTheme</code>: string — one of <code>any</code>, <code>flash</code>, <code>mouse</code>, <code>click</code>, <code>drag</code>, <code>flow</code>, <code>orbit</code>, <code>edge</code>, <code>trail</code>, <code>color</code>, <code>group</code>, <code>speed</code>, <code>templates</code></li>
+                    <li><code>presetTheme</code>: string — one of <code>any</code>, <code>flash</code>, <code>mouse</code>, <code>click</code>, <code>drag</code>, <code>physics</code>, <code>flow</code>, <code>orbit</code>, <code>edge</code>, <code>trail</code>, <code>color</code>, <code>group</code>, <code>speed</code>, <code>templates</code></li>
                     <li><code>presetBundle</code>: string — one of <code>none</code>, <code>ai-ml-pack</code>, <code>physics-pack</code>, <code>nature-pack</code>, <code>clustering-pack</code>, <code>optimization-pack</code>, <code>graphs-pack</code>, <code>dimensionality-pack</code>, <code>navigation-pack</code>, <code>generative-pack</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
                     <li><code>randomPresets</code>: boolean|number — when true/number, loads random presets on start; number picks that many</li>
                 </ul>
@@ -4436,6 +4437,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 click: (p) => /click/i.test(p.id) || /click/i.test(p.name || ''),
                 templates: (p) => /^template-/.test(p.id),
                 flow: (p) => /flow|vortex|orbit|lane/i.test(p.id) || /Flow|Vortex|Orbit|Lane/i.test(p.name || ''),
+                physics: (p) => /^Physics\b/i.test(p.name || '') || /physics/i.test(p.id || ''),
                 edge: (p) => /edge|boundary|wall|runner/i.test(p.id) || /Edge/i.test(p.name || ''),
                 trail: (p) => /trail|pheromone|mesh/i.test(p.id) || /Trail/i.test(p.name || ''),
                 orbit: (p) => /orbit|vortex|centroid/i.test(p.id) || /Orbit|Vortex|Centroid/i.test(p.name || ''),

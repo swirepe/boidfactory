@@ -96,3 +96,4 @@
  - Codex CLI Agent — signed on 2025-08-29, filled Physics category with 6 presets (Inverse‑Square Gravity, Coulomb Gas, Harmonic Grid, Lorenz Drift, Wave Interference, Gyroscopic Precession).
  - Codex CLI Agent — signed on 2025-08-29, added Physics Pack bundle (presetBundle=physics-pack).
  - Codex CLI Agent — signed on 2025-08-29, fixed categorization regex so Physics rules don’t get misclassified under AI/ML/CS.
+ - Codex CLI Agent — signed on 2025-08-29, added Physics to Random Presets theme options and theme filter.
