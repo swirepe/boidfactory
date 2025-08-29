@@ -1481,6 +1481,30 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             userFunctions.forEach(fn => {
                  createSlider(`${fn.name}Weight`, `${fn.name.charAt(0).toUpperCase() + fn.name.slice(1)} Weight`, 0, 5, 0.1, config[`${fn.name}Weight`]);
             });
+
+            // Rule Presets batch reset
+            const presetsBox = document.createElement('div');
+            presetsBox.className = 'config-item';
+            presetsBox.innerHTML = `
+                <h3>Rule Presets</h3>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                    <label>Count
+                        <input type="number" id="preset-count" min="1" max="${Math.max(4, rulePresets.length)}" value="4"
+                            style="width:72px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
+                    </label>
+                    <label><input type="checkbox" id="preset-include-core" checked> Include core rules</label>
+                    <button id="preset-reset-btn" style="background: var(--primary-color); color: #fff; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono);">Reset with Presets</button>
+                </div>
+            `;
+            container.appendChild(presetsBox);
+            const presetBtn = presetsBox.querySelector('#preset-reset-btn');
+            presetBtn.addEventListener('click', () => {
+                const countEl = presetsBox.querySelector('#preset-count');
+                const includeCoreEl = presetsBox.querySelector('#preset-include-core');
+                const n = Math.max(1, Math.min(rulePresets.length, parseInt(countEl.value || '1', 10)));
+                const includeCore = !!includeCoreEl.checked;
+                resetRulesWithPresets(n, includeCore);
+            });
             
             const createToggle = (id, label, value) => {
                 const item = document.createElement('div');
