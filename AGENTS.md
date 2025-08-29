@@ -98,3 +98,5 @@
  - Codex CLI Agent — signed on 2025-08-29, fixed categorization regex so Physics rules don’t get misclassified under AI/ML/CS.
  - Codex CLI Agent — signed on 2025-08-29, added Physics to Random Presets theme options and theme filter.
  - Codex CLI Agent — signed on 2025-08-29, added ML — K-Means Colorize (Online) preset to color boids by cluster.
+ - Codex CLI Agent — signed on 2025-08-29, added Visual — Separation Radius preset to show separation zones around boids.
+ - Codex CLI Agent — signed on 2025-08-29, added Visual — Perception Color Blend preset (perception rings + hue blending to neighbors).

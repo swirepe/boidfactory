@@ -183,3 +183,5 @@ yes please (add Physics Pack bundle)
 all the physics rules seem to be in the AI section — fix categorization regex to anchor AI/ML/CS and check Physics first
 yes please (add physics random preset theme)
 let's write a rule that runs k-means clustering and colors the boids accoding to their color
+let's write a rule that visualizes the separation radius around each boid
+Let's write a rule that visualizes the perception radius, and have it gradually change color to the average color of the perceived boids

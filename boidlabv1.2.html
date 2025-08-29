@@ -2195,6 +2195,85 @@ return new Vector();` },
 const u=boid.vel.clone().normalize(); if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.2){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+20)%360)) + ',100%,70%,0.16)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x-u.x*6,y-u.y*6); ctx.lineTo(x-u.x*2,y-u.y*2); ctx.stroke(); ctx.strokeStyle='hsla(' + (((config.hue+200)%360)) + ',100%,70%,0.12)'; ctx.beginPath(); ctx.moveTo(x-u.x*10,y-u.y*10); ctx.lineTo(x-u.x*6,y-u.y*6); ctx.stroke();}); }
 return u.mult(0.002);` },
 
+          { id: 'viz-separation-radius', name: 'Visual — Separation Radius', code: `/**
+  Separation Radius Visualizer
+  Draws a translucent ring around each boid indicating the separation radius.
+  The ring subtly brightens with local crowding (more neighbors inside radius).
+  No steering — purely visual.
+  @returns {Vector}
+*/
+const R = Math.max(8, (config.perceptionRadius || 50) * 0.6); // treat 60% of perception as separation zone
+let crowd = 0;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < R) crowd++;
+}
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x = boid.pos.x, y = boid.pos.y;
+  const baseAlpha = 0.08;
+  const boost = Math.min(0.18, crowd * 0.012);
+  const alpha = (baseAlpha + boost).toFixed(3);
+  api.addDrawable((ctx) => {
+    // Outer ring
+    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'hsla(' + (((config.hue+260)%360)) + ',100%,70%,' + alpha + ')';
+    ctx.lineWidth = 1; ctx.stroke();
+    // Inner subtle fill to hint radius
+    const g = ctx.createRadialGradient(x, y, Math.max(1,R*0.85), x, y, R);
+    g.addColorStop(0, 'hsla(' + (((config.hue+260)%360)) + ',100%,70%,0.00)');
+    g.addColorStop(1, 'hsla(' + (((config.hue+260)%360)) + ',100%,70%,' + (alpha*0.6) + ')');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2); ctx.fill();
+  });
+}
+return new Vector();` },
+
+          { id: 'viz-perception-color-blend', name: 'Visual — Perception Color Blend', code: `/**
+  Perception Radius Color Blend
+  Draws the perception radius and gradually blends each boid's hue toward the
+  circular-mean hue of perceived neighbors (handles wrap-around correctly).
+  No steering — purely visual and cosmetic.
+  @returns {Vector}
+*/
+const R = Math.max(8, (config.perceptionRadius || 50));
+// Compute circular mean of neighbor hues within perception radius
+let sx = 0, sy = 0, n = 0;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0 && d < R) {
+    const a = (o.hue || 0) * Math.PI / 180;
+    sx += Math.cos(a); sy += Math.sin(a); n++;
+  }
+}
+if (n > 0 && (config.perceptionBlend !== false)) {
+  const meanAng = Math.atan2(sy, sx) * 180 / Math.PI;
+  const targetHue = (meanAng + 360) % 360;
+  // Smoothly move boid.hue toward targetHue using shortest angular distance
+  const delta = ((targetHue - boid.hue + 540) % 360) - 180;
+  const rate = Math.max(0, Math.min(1, (typeof config.perceptionBlendRate === 'number' ? config.perceptionBlendRate : 0.08)));
+  if (rate > 0) {
+  boid.hue = (boid.hue + rate * delta + 360) % 360;
+  }
+}
+// Visualize perception radius with current (blended) hue
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x = boid.pos.x, y = boid.pos.y;
+  const alpha = 0.12;
+  const ringHue = Math.round(boid.hue) % 360;
+  api.addDrawable((ctx) => {
+    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'hsla(' + (ringHue) + ',100%,70%,' + alpha + ')';
+    ctx.lineWidth = 1; ctx.stroke();
+    // faint inner gradient
+    const g = ctx.createRadialGradient(x, y, Math.max(1, R*0.7), x, y, R);
+    g.addColorStop(0, 'hsla(' + (ringHue) + ',100%,70%,0.00)');
+    g.addColorStop(1, 'hsla(' + (ringHue) + ',100%,70%,' + (alpha*0.5) + ')');
+    ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y, R, 0, Math.PI*2); ctx.fill();
+  });
+}
+return new Vector();` },
+
           // ——— Interaction‑Driven (Clicks/Drags) ———
           { id: 'click-gravity-well-strong', name: 'Click — Gravity Well (Strong)', code: `/**
   Gravity Well (Strong)
@@ -3210,6 +3289,9 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 presetCount: 4,
                 presetTheme: 'any',
                 presetBundle: 'none',
+                perceptionBlend: true,
+                perceptionBlendRate: 0.08,
+                rulesSelection: [],
                 configTab: 'settings',
                 ...urlParams
             };
@@ -3602,6 +3684,18 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 appendTarget.appendChild(item);
             };
 
+            // Toggle helper (needs to be defined before first use)
+            const createToggle = (id, label, value) => {
+                const item = document.createElement('div');
+                item.innerHTML = `<label class="config-item"><input type="checkbox" id="${id}" ${value ? 'checked' : ''}> ${label}</label>`;
+                item.querySelector('input').addEventListener('change', e => {
+                    config[id] = e.target.checked;
+                    logConfig(`${id} changed to ${config[id]}`);
+                    if (config.debug) updateAllURLParams(); else updateURL(id, config[id]);
+                });
+                appendTarget.appendChild(item);
+            };
+
             createSlider('boidCount', 'Boid Count', 10, 1000, 10, config.boidCount);
             createSlider('boidSize', 'Boid Size', 2, 20, 1, config.boidSize);
             createSlider('boidSizeVariance', 'Size Variance', 0, 10, 0.5, config.boidSizeVariance);
@@ -3610,6 +3704,9 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             createSlider('maxForce', 'Max Force', 0.01, 1, 0.01, config.maxForce);
             createSlider('perceptionRadius', 'Perception', 10, 200, 1, config.perceptionRadius);
             createSlider('visualDensity', 'Visual Density', 0, 2, 0.05, config.visualDensity);
+            // Perception hue blend controls
+            createToggle('perceptionBlend', 'Perception Hue Blend', config.perceptionBlend);
+            createSlider('perceptionBlendRate', 'Perception Blend Rate', 0, 0.4, 0.01, config.perceptionBlendRate);
             
             userFunctions.forEach(fn => {
                  const labelName = fn.displayName ? fn.displayName : (fn.name.charAt(0).toUpperCase() + fn.name.slice(1));
@@ -3740,16 +3837,6 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 });
             }
             
-            const createToggle = (id, label, value) => {
-                const item = document.createElement('div');
-                item.innerHTML = `<label class="config-item"><input type="checkbox" id="${id}" ${value ? 'checked' : ''}> ${label}</label>`;
-                item.querySelector('input').addEventListener('change', e => {
-                    config[id] = e.target.checked;
-                    logConfig(`${id} changed to ${config[id]}`);
-                    if (config.debug) updateAllURLParams(); else updateURL(id, config[id]);
-                });
-                appendTarget.appendChild(item);
-            };
             createToggle('visualizeQuadtree', 'Show Quadtree', config.visualizeQuadtree);
             createToggle('debug', 'Debug Mode', config.debug);
 
@@ -3780,6 +3867,19 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             `;
             rulesWrap.appendChild(actions);
             const listHost = document.createElement('div'); listHost.style.display = 'grid'; listHost.style.gridTemplateColumns = 'repeat(auto-fit, minmax(240px, 1fr))'; listHost.style.gap='6px 12px'; rulesWrap.appendChild(listHost);
+            // Initialize rulesSelection from current rules if empty
+            if (!Array.isArray(config.rulesSelection) || config.rulesSelection.length === 0) {
+                try {
+                    const activeNames = new Set(userFunctions.map(u => u.name));
+                    const inferred = rulePresets
+                        .filter(p => activeNames.has((typeof sanitizeRuleName === 'function') ? sanitizeRuleName(p.name || '') : (p.name||'').toLowerCase()))
+                        .map(p => p.id);
+                    if (inferred.length) {
+                        config.rulesSelection = inferred;
+                        if (config.debug) updateAllURLParams(); else updateURL('rulesSelection', config.rulesSelection);
+                    }
+                } catch (e) { /* noop */ }
+            }
             const groups = categorizePresets();
             Object.keys(groups).forEach(group => {
                 const box = document.createElement('div'); box.style.border='1px solid rgba(255,255,255,0.12)'; box.style.borderRadius='6px'; box.style.padding='6px 8px'; box.dataset.group='rules-box';
@@ -3793,13 +3893,15 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     const id = `rules-${p.id}`;
                     const label = document.createElement('label'); label.style.display='flex'; label.style.alignItems='center'; label.style.gap='6px'; label.style.fontSize='12px'; label.style.cursor='pointer'; label.dataset.preset='1'; label.dataset.name=(p.name||'').toLowerCase();
                     const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p.id; cb.dataset.preset='1'; cb.id=id;
+                    if (Array.isArray(config.rulesSelection) && config.rulesSelection.includes(p.id)) cb.checked = true;
+                    cb.addEventListener('change', () => saveRulesSelection());
                     label.appendChild(cb);
                     const span = document.createElement('span'); span.textContent = p.name; label.appendChild(span);
                     box.appendChild(label);
                 });
                 // Per-group listeners
-                btnAll.addEventListener('click', () => { box.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => { if (cb.offsetParent !== null) cb.checked = true; }); });
-                btnNone.addEventListener('click', () => { box.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => { if (cb.offsetParent !== null) cb.checked = false; }); });
+                btnAll.addEventListener('click', () => { box.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => { if (cb.offsetParent !== null) cb.checked = true; }); saveRulesSelection(); });
+                btnNone.addEventListener('click', () => { box.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => { if (cb.offsetParent !== null) cb.checked = false; }); saveRulesSelection(); });
                 listHost.appendChild(box);
             });
             // Search filtering
@@ -3823,15 +3925,22 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             // Rules tab actions
             rulesWrap.querySelector('#rules-select-all').addEventListener('click', () => {
                 rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => cb.checked = true);
+                saveRulesSelection();
             });
             rulesWrap.querySelector('#rules-clear-all').addEventListener('click', () => {
                 rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => cb.checked = false);
+                saveRulesSelection();
             });
             rulesWrap.querySelector('#rules-apply').addEventListener('click', () => {
                 const ids = Array.from(rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]:checked')).map(el => el.value);
                 const includeCore = !!rulesWrap.querySelector('#rules-include-core')?.checked;
                 applyPresetSelection(ids, includeCore);
             });
+            function saveRulesSelection() {
+                const ids = Array.from(rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]:checked')).map(el => el.value);
+                config.rulesSelection = ids;
+                if (config.debug) updateAllURLParams(); else updateURL('rulesSelection', config.rulesSelection);
+            }
         }
         
         function setupStatsUI() {
