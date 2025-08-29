@@ -82,3 +82,6 @@
  - Codex CLI Agent — signed on 2025-08-29, New button now uses currently selected preset for new rule creation.
  - Codex CLI Agent — signed on 2025-08-29, removed extra preset label; new tab still uses human-readable preset name.
  - Codex CLI Agent — signed on 2025-08-29, config weight labels now use the rule’s human-readable name when creating/renaming rules.
+ - Codex CLI Agent — signed on 2025-08-29, added 5 AI/ML/CS presets with rich visuals: Transformer Self-Attention, K-Means Centroids, Gaussian Mixture Attraction, Swarm Dijkstra Heuristic, Epsilon-Greedy Explorer.
+ - Codex CLI Agent — signed on 2025-08-29, added 10 more AI/ML/CS presets with rich visuals, and reorganized preset categories to surface AI/ML/CS after Core.
+ - Codex CLI Agent — signed on 2025-08-29, added AI/ML Pack bundle (presetBundle=ai-ml-pack) and fixed flow-pack id.

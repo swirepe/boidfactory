@@ -2374,6 +2374,375 @@ if (oppN) {
   steer.add(Vector.sub(away, boid.vel).limit(boid.maxForce * 0.8));
 }
 return steer;` },
+
+          { id: 'ai-pca-principal-flow', name: 'ML — PCA Principal Flow', code: `/**
+  PCA Principal Flow
+  Estimate local covariance from neighbor relative positions; steer along the first principal component.
+  Visuals: Draw the principal axis around the boid.
+  @returns {Vector}
+*/
+const pts = [];
+for (const o of neighbors) pts.push([o.pos.x - boid.pos.x, o.pos.y - boid.pos.y]);
+if (pts.length < 2) return new Vector();
+let sx=0, sy=0; for (const p of pts){ sx+=p[0]; sy+=p[1]; }
+sx/=pts.length; sy/=pts.length;
+let sxx=0, sxy=0, syy=0; for (const p of pts){ const x=p[0]-sx, y=p[1]-sy; sxx+=x*x; sxy+=x*y; syy+=y*y; }
+// Eigenvector of 2x2 covariance for largest eigenvalue
+const tr = sxx+syy; const det = sxx*syy - sxy*sxy; const tmp = Math.sqrt(Math.max(0,tr*tr/4 - det));
+const l1 = tr/2 + tmp; // top eigenvalue
+let vx=1, vy=0; if (Math.abs(sxy) > 1e-6 || Math.abs(sxx - l1) > 1e-6) { vx = sxy; vy = l1 - sxx; }
+const mag = Math.hypot(vx,vy)||1; vx/=mag; vy/=mag;
+const dir = new Vector(vx, vy);
+const desired = dir.mult(boid.maxSpeed*0.9);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x-vx*12,y-vy*12); ctx.lineTo(x+vx*12,y+vy*12); ctx.strokeStyle='hsla(' + (((config.hue+260)%360)) + ',100%,70%,0.22)'; ctx.lineWidth=1.2; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'ai-perceptron-boundary', name: 'ML — Perceptron Decision Boundary', code: `/**
+  Perceptron Decision Boundary
+  Classify sides of a line w·x + b = 0; steer toward positive side.
+  Visuals: Draw the decision line and normal arrow.
+  @returns {Vector}
+*/
+const w = new Vector(1, -0.6); const b = -0.3*gameState.width;
+const x = new Vector(boid.pos.x, boid.pos.y);
+const score = w.x*x.x + w.y*x.y + b;
+const n = new Vector(w.x, w.y).normalize();
+const desired = (score >= 0 ? n : n.clone().mult(-1)).mult(boid.maxSpeed*0.7);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const p0=new Vector(0, (-b - w.x*0)/Math.max(1e-6,w.y)); const p1=new Vector(gameState.width, (-b - w.x*gameState.width)/Math.max(1e-6,w.y)); api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(p0.x,p0.y); ctx.lineTo(p1.x,p1.y); ctx.strokeStyle='hsla(' + (((config.hue+180)%360)) + ',100%,70%,0.18)'; ctx.lineWidth=1; ctx.stroke(); const cx=boid.pos.x, cy=boid.pos.y; ctx.beginPath(); ctx.moveTo(cx,cy); ctx.lineTo(cx+n.x*14, cy+n.y*14); ctx.strokeStyle='hsla(' + (boid.hue) + ',100%,70%,0.22)'; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.7);` },
+
+          { id: 'ai-q-learning-trace', name: 'AI — Q-Learning Trace', code: `/**
+  Q-Learning Trace (Heuristic)
+  Treat pheromone as value; ascend its gradient (exploit) and lay an eligibility-like trace.
+  Visuals: Green vector when ascending gradient; faint dots marking trace.
+  @returns {Vector}
+*/
+const s=6; const pR=(x,y)=>{ const col=Math.floor(Math.max(0,Math.min(pheromones.cols-1,x/pheromones.cell))); const row=Math.floor(Math.max(0,Math.min(pheromones.rows-1,y/pheromones.cell))); return pheromones.grid[row*pheromones.cols+col]||0; };
+const L=pR(boid.pos.x-s,boid.pos.y), Rv=pR(boid.pos.x+s,boid.pos.y), U=pR(boid.pos.x,boid.pos.y-s), D=pR(boid.pos.x,boid.pos.y+s);
+const grad=new Vector(Rv-L, D-U);
+let desired = grad.mag()>1e-6 ? grad.normalize().mult(boid.maxSpeed*0.9) : Vector.random2D().mult(boid.maxSpeed*0.5);
+if (typeof api!=='undefined'&&api&&api.depositTrail) api.depositTrail(boid.pos.x, boid.pos.y, 0.6);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+desired.x*10,y+desired.y*10); ctx.strokeStyle='hsla(' + (((config.hue+90)%360)) + ',100%,70%,0.25)'; ctx.lineWidth=1.5; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'cs-bfs-frontier', name: 'CS — BFS Frontier Expansion', code: `/**
+  BFS Frontier Expansion (Stylized)
+  Expand a frontier from a source; steer outward in waves.
+  Visuals: Concentric expanding rings and outward tick marks.
+  @returns {Vector}
+*/
+const src=new Vector(gameState.width*0.15, gameState.height*0.15);
+const to=Vector.sub(boid.pos, src); const d=to.mag();
+const wave = Math.sin((performance.now()/400) + d/40);
+const outward = to.normalize().mult(boid.maxSpeed*(0.6+0.3*Math.max(0,wave)));
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=src.x,y=src.y; const r=((performance.now()/12)%200); api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+40)%360)) + ',100%,70%,0.16)'; ctx.lineWidth=1; ctx.stroke(); }); }
+return Vector.sub(outward, boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'cs-pagerank-drift', name: 'CS — PageRank Drift', code: `/**
+  PageRank Drift (Toy Graph)
+  Drift among 4 anchors with transition probabilities; steer toward current anchor.
+  Visuals: Graph nodes/edges with thickness hinting relative rank.
+  @returns {Vector}
+*/
+if (!boid._prNode) boid._prNode = Math.floor(Math.random()*4);
+const nodes=[
+  new Vector(gameState.width*0.2, gameState.height*0.3),
+  new Vector(gameState.width*0.5, gameState.height*0.2),
+  new Vector(gameState.width*0.8, gameState.height*0.35),
+  new Vector(gameState.width*0.6, gameState.height*0.75)
+];
+const T=[[0.05,0.6,0.25,0.1],[0.2,0.1,0.6,0.1],[0.15,0.15,0.1,0.6],[0.5,0.1,0.2,0.2]];
+// occasional jump
+if (Math.random()<0.02){ const r=Math.random(); let a=0, j=0; for(;j<4;j++){ a+=T[boid._prNode][j]; if (r<=a) break; } boid._prNode=j; }
+const target=nodes[boid._prNode];
+const desired=Vector.sub(target,boid.pos).normalize().mult(boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ // draw graph
+  const pr=[0.25,0.25,0.25,0.25]; // simple equal for visual
+  ctx.lineWidth=1; for(let i=0;i<4;i++){ for(let j=0;j<4;j++){ if (T[i][j]>0.1){ ctx.beginPath(); ctx.moveTo(nodes[i].x,nodes[i].y); ctx.lineTo(nodes[j].x,nodes[j].y); ctx.strokeStyle='hsla(' + (((config.hue+200)%360)) + ',100%,70%,' + (0.08+0.12*T[i][j]) + ')'; ctx.stroke(); } } }
+  for(let i=0;i<4;i++){ ctx.beginPath(); ctx.arc(nodes[i].x,nodes[i].y, 6+pr[i]*6,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+200)%360)) + ',100%,70%,0.22)'; ctx.stroke(); }
+}); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'ai-genetic-drift', name: 'AI — Genetic Drift', code: `/**
+  Genetic Drift (GA-Inspired)
+  Occasional mutation of heading; selection bias toward faster neighbors.
+  Visuals: Mutation spark and velocity trail.
+  @returns {Vector}
+*/
+let dir = boid.vel.clone().normalize();
+// mutation
+if (Math.random()<0.02){ const a=(Math.random()-0.5)*0.8; const c=Math.cos(a), s=Math.sin(a); const nx=dir.x*c - dir.y*s, ny=dir.x*s + dir.y*c; dir.x=nx; dir.y=ny; if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y,5,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+10)%360)) + ',100%,70%,0.22)'; ctx.stroke(); }); } }
+// selection toward fast neighbors
+let best=null, bestSpd=-1; for (const o of neighbors){ const sp=o.vel.mag(); if (sp>bestSpd){ bestSpd=sp; best=o; } }
+if (best){ const dv=best.vel.clone().normalize(); dir=dir.mult(0.7).add(dv.mult(0.3)).normalize(); }
+const desired = dir.mult(boid.maxSpeed*0.85);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; const back=boid.vel.clone().normalize().mult(-8); api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+back.x,y+back.y); ctx.strokeStyle='hsla(' + (boid.hue) + ',100%,70%,0.16)'; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'ml-dbscan-core', name: 'ML — DBSCAN Density Core', code: `/**
+  DBSCAN Density Core
+  If enough neighbors within eps, treat as core: pull toward local centroid; else wander.
+  Visuals: Circle ring when core; centroid line.
+  @returns {Vector}
+*/
+const eps = config.perceptionRadius*0.7; const minPts=6;
+let cnt=0, c=new Vector();
+for (const o of neighbors){ const d=Vector.dist(boid.pos,o.pos); if(d>0&&d<eps){ cnt++; c.add(o.pos); } }
+if (cnt>=minPts){ c.div(cnt); const desired=Vector.sub(c,boid.pos).normalize().mult(boid.maxSpeed*0.7); if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y, eps*0.25,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+300)%360)) + ',100%,70%,0.16)'; ctx.stroke(); ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(c.x,c.y); ctx.strokeStyle='hsla(' + (((config.hue+300)%360)) + ',100%,70%,0.16)'; ctx.stroke(); }); } return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.7);} else { return Vector.random2D().mult(boid.maxSpeed*0.3); }` },
+
+          { id: 'ai-a-star-field', name: 'AI — A* Heuristic Field', code: `/**
+  A* Heuristic Field (Stylized)
+  Approximate A* via combining goal heuristic and sinusoidal obstacle costs.
+  Visuals: Obstacle bands and direction arrow.
+  @returns {Vector}
+*/
+const goal=new Vector(gameState.width*0.85, gameState.height*0.85);
+const toG=Vector.sub(goal,boid.pos); const d=toG.mag(); const h=toG.clone().div(Math.max(1,d));
+// synthetic obstacle cost gradient
+const cx=Math.sin(boid.pos.y*0.02)*0.6, cy=Math.cos(boid.pos.x*0.02)*0.6;
+const cost = new Vector(cx, cy);
+const dirA = new Vector(h.x - cost.x, h.y - cost.y).normalize();
+const desired = dirA.mult(boid.maxSpeed*0.85);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ // draw a few obstacle bands
+  ctx.strokeStyle='hsla(' + (((config.hue+280)%360)) + ',100%,70%,0.08)';
+  for (let y=40;y<gameState.height;y+=80){ ctx.beginPath(); for(let x=0;x<gameState.width;x+=20){ ctx.moveTo(x,y+10*Math.sin(x*0.02)); ctx.lineTo(x+10,y+10*Math.sin((x+10)*0.02)); } ctx.stroke(); }
+}); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'cs-bloom-filter-avoid', name: 'CS — Bloom Filter Avoidance', code: `/**
+  Bloom Filter Avoidance (Toy)
+  Hash grid cells; cells "set" in a Bloom filter are avoided by steering away.
+  Visuals: Highlight hashed avoided cells.
+  @returns {Vector}
+*/
+const cell=pheromones.cell||16; const col=Math.floor(boid.pos.x/cell), row=Math.floor(boid.pos.y/cell);
+function h1(i,j){ return (i*73856093 ^ j*19349663) & 255; }
+function h2(i,j){ return (i*83492791 ^ j*2971215073) & 255; }
+function isSet(i,j){ return ((h1(i,j)&1) && (h2(i,j)&1)); }
+let avoid=new Vector();
+for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){ const ci=col+dx, rj=row+dy; if (isSet(ci,rj)){ const cx=ci*cell+cell/2, cy=rj*cell+cell/2; const away=new Vector(boid.pos.x-cx, boid.pos.y-cy); const m=Math.max(1,away.mag()); avoid.add(away.div(m)); } }
+const desired = avoid.mag()>1e-6 ? avoid.normalize().mult(boid.maxSpeed*0.7) : new Vector();
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.fillStyle='hsla(' + (((config.hue+320)%360)) + ',100%,60%,0.06)'; for (let y=0;y<pheromones.rows;y++){ for (let x=0;x<pheromones.cols;x++){ if (isSet(x,y)) ctx.fillRect(x*cell,y*cell,cell,cell); } } }); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.7);` },
+
+          { id: 'ml-svm-margin', name: 'ML — SVM Margin Maximizer', code: `/**
+  SVM Margin Maximizer (Toy)
+  Two class centers define a separating hyperplane; steer along margin direction.
+  Visuals: Decision boundary and margin bands.
+  @returns {Vector}
+*/
+const a=new Vector(gameState.width*0.35, gameState.height*0.35), b=new Vector(gameState.width*0.65, gameState.height*0.65);
+const wv=new Vector(b.x-a.x,b.y-a.y).normalize(); const n=new Vector(wv.y,-wv.x);
+const mid=new Vector((a.x+b.x)/2,(a.y+b.y)/2);
+const to=Vector.sub(boid.pos, mid); const side=Math.sign(to.x*n.x + to.y*n.y)||1;
+const desired = n.mult(side*boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ // boundary and margins
+  const L=1000; ctx.beginPath(); ctx.moveTo(mid.x - n.y*L, mid.y + n.x*L); ctx.lineTo(mid.x + n.y*L, mid.y - n.x*L); ctx.strokeStyle='hsla(' + (((config.hue+150)%360)) + ',100%,70%,0.18)'; ctx.stroke();
+  ctx.setLineDash([6,6]); ctx.beginPath(); ctx.moveTo(mid.x - n.y*L + wv.x*20, mid.y + n.x*L + wv.y*20); ctx.lineTo(mid.x + n.y*L + wv.x*20, mid.y - n.x*L + wv.y*20); ctx.stroke(); ctx.setLineDash([]);
+}); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.85);` },
+
+          { id: 'ml-pca-velocity', name: 'ML — PCA Velocity Consensus', code: `/**
+  PCA Velocity Consensus
+  PCA on neighbor velocities; align to first principal direction.
+  Visuals: Velocity covariance axis at boid.
+  @returns {Vector}
+*/
+const vs=[]; for(const o of neighbors){ vs.push([o.vel.x, o.vel.y]); }
+if (vs.length<2) return new Vector();
+let mx=0,my=0; for(const v of vs){ mx+=v[0]; my+=v[1]; } mx/=vs.length; my/=vs.length;
+let vxx=0,vxy=0,vyy=0; for(const v of vs){ const x=v[0]-mx, y=v[1]-my; vxx+=x*x; vxy+=x*y; vyy+=y*y; }
+const tr=vxx+vyy; const det=vxx*vyy - vxy*vxy; const t=Math.sqrt(Math.max(0,tr*tr/4 - det));
+const l1=tr/2 + t; let ex=1, ey=0; if (Math.abs(vxy)>1e-6 || Math.abs(vxx-l1)>1e-6){ ex=vxy; ey=l1-vxx; }
+const em=Math.hypot(ex,ey)||1; ex/=em; ey/=em; const pd=new Vector(ex,ey);
+const desired=pd.mult(boid.maxSpeed*0.9);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x-ex*12, y-ey*12); ctx.lineTo(x+ex*12, y+ey*12); ctx.strokeStyle='hsla(' + (((config.hue+200)%360)) + ',100%,70%,0.22)'; ctx.stroke(); }); }
+return Vector.sub(desired,boid.vel).limit(boid.maxForce);` },
+
+          { id: 'ai-transformer-attention', name: 'AI — Transformer Self-Attention', code: `/**
+  Transformer Self-Attention (Single-Head)
+  Compute attention weights over neighbors based on velocity similarity (cosine).
+  Steering follows a weighted combination of neighbor velocities.
+
+  Visuals:
+  - Draw lines to the top-3 attended neighbors; opacity encodes attention weight.
+  - A small arc indicates the boid's current heading.
+  @returns {Vector}
+*/
+const R = config.perceptionRadius;
+const v = boid.vel.clone(); const vmag = Math.max(1e-6, v.mag());
+const scored = [];
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos); if (d === 0 || d > R) continue;
+  const sim = (o.vel.x * v.x + o.vel.y * v.y) / (Math.max(1e-6, o.vel.mag()) * vmag); // cosine
+  const score = sim * 2.0 - (d / R); // prefer similar and closer
+  scored.push({ o, score });
+}
+if (!scored.length) return new Vector();
+// Softmax with temperature
+const temp = 0.8; const maxS = Math.max(...scored.map(s => s.score));
+let Z = 0; for (const s of scored) { s.w = Math.exp((s.score - maxS) / temp); Z += s.w; }
+for (const s of scored) s.w /= Z;
+// Weighted combination of neighbor velocities
+let target = new Vector(); for (const s of scored) {
+  const dir = s.o.vel.clone().normalize(); target.add(dir.mult(s.w));
+}
+target.normalize().mult(boid.maxSpeed);
+// Visualize top-3 attention edges
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const top = scored.slice().sort((a,b)=>b.w-a.w).slice(0,3);
+  const x=boid.pos.x,y=boid.pos.y;
+  api.addDrawable((ctx)=>{
+    for (const s of top) {
+      ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(s.o.pos.x, s.o.pos.y);
+      ctx.strokeStyle = 'hsla(' + (boid.hue) + ',100%,70%,' + (0.1 + 0.35*s.w).toFixed(3) + ')';
+      ctx.lineWidth = 1; ctx.stroke();
+    }
+    // heading arc
+    const ang = Math.atan2(boid.vel.y, boid.vel.x);
+    ctx.beginPath(); ctx.arc(x,y,8,ang-0.5,ang+0.5);
+    ctx.strokeStyle = 'hsla(' + (((config.hue+40)%360)) + ',100%,70%,0.22)'; ctx.lineWidth=1; ctx.stroke();
+  });
+}
+return Vector.sub(target, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'ml-kmeans-centroids', name: 'ML — K-Means Centroids', code: `/**
+  K-Means Centroids (Static Centers)
+  Assign each boid to the nearest centroid and steer toward it.
+  Centroids are placed deterministically on the canvas.
+
+  Visuals:
+  - Draw centroid markers and a faint line from boid to its nearest centroid.
+  @returns {Vector}
+*/
+const C = [
+  new Vector(gameState.width*0.25, gameState.height*0.35),
+  new Vector(gameState.width*0.75, gameState.height*0.35),
+  new Vector(gameState.width*0.5, gameState.height*0.7)
+];
+let bestC = null, bestD = Infinity;
+for (const c of C) { const d = Vector.dist(boid.pos, c); if (d < bestD) { bestD = d; bestC = c; } }
+if (!bestC) return new Vector();
+const desired = Vector.sub(bestC, boid.pos).normalize().mult(boid.maxSpeed * 0.9);
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x=boid.pos.x,y=boid.pos.y;
+  api.addDrawable((ctx)=>{
+    // Centroids
+    for (const c of C) { ctx.beginPath(); ctx.arc(c.x,c.y,6,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+100)%360)) + ',100%,70%,0.22)'; ctx.lineWidth=1.5; ctx.stroke(); }
+    // Line to assigned centroid
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(bestC.x,bestC.y);
+    ctx.strokeStyle = 'hsla(' + (boid.hue) + ',100%,70%,0.16)'; ctx.lineWidth=1; ctx.stroke();
+  });
+}
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.9);` },
+
+          { id: 'ml-gaussian-mixture', name: 'ML — Gaussian Mixture Attraction', code: `/**
+  Gaussian Mixture Attraction
+  Two Gaussian "likelihood lobes" pull boids toward high-probability regions.
+  Steering follows the gradient of the log-likelihood.
+
+  Visuals:
+  - Concentric contour rings around each Gaussian center.
+  @returns {Vector}
+*/
+const c1 = new Vector(gameState.width*0.35, gameState.height*0.45);
+const c2 = new Vector(gameState.width*0.65, gameState.height*0.55);
+const s1 = 120, s2 = 90; // standard deviations
+function gradGaussian(c, s) {
+  const d = Vector.sub(c, boid.pos); const r2 = Math.max(1, d.x*d.x + d.y*d.y);
+  const w = Math.exp(-r2 / (2*s*s));
+  return d.mult(w / (s*s));
+}
+let g = gradGaussian(c1, s1).add(gradGaussian(c2, s2));
+const desired = g.normalize().mult(boid.maxSpeed * 0.8);
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  api.addDrawable((ctx)=>{
+    const centers = [[c1,s1], [c2,s2]];
+    for (const [c, s] of centers) {
+      for (let i=1;i<=3;i++) {
+        ctx.beginPath(); ctx.arc(c.x,c.y,(s/3)*i,0,Math.PI*2);
+        ctx.strokeStyle='hsla(' + (((config.hue+220)%360)) + ',100%,70%,' + (0.12 - i*0.02) + ')';
+        ctx.lineWidth=1; ctx.stroke();
+      }
+    }
+  });
+}
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.7);` },
+
+          { id: 'cs-swarm-dijkstra', name: 'CS — Swarm Dijkstra Heuristic', code: `/**
+  Swarm Dijkstra Heuristic (Greedy)
+  Move toward a goal while avoiding busy (high-pheromone) regions.
+  Heuristic: steer along negative gradient of (distance-to-goal + lambda * pheromone).
+
+  Visuals:
+  - Goal marker, path arrow toward heuristic direction.
+  @returns {Vector}
+*/
+const goal = new Vector(gameState.width*0.85, gameState.height*0.15);
+// distance gradient
+const dg = Vector.sub(goal, boid.pos);
+const dist = Math.max(1, dg.mag());
+const gdir = dg.clone().div(dist); // unit toward goal
+// pheromone gradient (sample 4-neighborhood)
+let phx = 0, phy = 0;
+if (typeof api !== 'undefined' && api && api.depositTrail) {
+  const s = 6;
+  const pR = (x,y)=>{ const col=Math.floor(Math.max(0,Math.min(pheromones.cols-1, x/pheromones.cell))); const row=Math.floor(Math.max(0,Math.min(pheromones.rows-1, y/pheromones.cell))); return pheromones.grid[row*pheromones.cols+col]||0; };
+  const pL = pR(boid.pos.x - s, boid.pos.y), pRr = pR(boid.pos.x + s, boid.pos.y);
+  const pU = pR(boid.pos.x, boid.pos.y - s), pD = pR(boid.pos.x, boid.pos.y + s);
+  phx = pL - pRr; phy = pU - pD; // negative gradient (more pheromone -> higher cost)
+}
+const lambda = 0.8;
+const hdir = new Vector(gdir.x + lambda*phx, gdir.y + lambda*phy).normalize();
+const desired = hdir.mult(boid.maxSpeed * 0.9);
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x=boid.pos.x,y=boid.pos.y;
+  api.addDrawable((ctx)=>{
+    // goal
+    ctx.beginPath(); ctx.arc(goal.x, goal.y, 7, 0, Math.PI*2);
+    ctx.strokeStyle='hsla(' + (((config.hue+140)%360)) + ',100%,70%,0.22)'; ctx.lineWidth=2; ctx.stroke();
+    // arrow for heuristic
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x + hdir.x*20, y + hdir.y*20);
+    ctx.strokeStyle='hsla(' + (boid.hue) + ',100%,70%,0.22)'; ctx.lineWidth=1.5; ctx.stroke();
+  });
+}
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.9);` },
+
+          { id: 'ai-epsilon-greedy', name: 'AI — Epsilon-Greedy Explorer', code: `/**
+  Epsilon-Greedy Explorer
+  With probability eps, explore randomly; otherwise climb the pheromone gradient ("exploit").
+  Also deposits positive trail to reinforce explored paths.
+
+  Visuals:
+  - Blue jitter when exploring, red arrow when exploiting.
+  @returns {Vector}
+*/
+const eps = 0.08;
+let desired = new Vector();
+let exploring = Math.random() < eps;
+if (exploring) {
+  desired = Vector.random2D().mult(boid.maxSpeed * 0.7);
+} else {
+  // follow pheromone gradient
+  const s = 6;
+  const pR = (x,y)=>{ const col=Math.floor(Math.max(0,Math.min(pheromones.cols-1, x/pheromones.cell))); const row=Math.floor(Math.max(0,Math.min(pheromones.rows-1, y/pheromones.cell))); return pheromones.grid[row*pheromones.cols+col]||0; };
+  const L = pR(boid.pos.x - s, boid.pos.y), Rv = pR(boid.pos.x + s, boid.pos.y);
+  const U = pR(boid.pos.x, boid.pos.y - s), D = pR(boid.pos.x, boid.pos.y + s);
+  const grad = new Vector(Rv - L, D - U).normalize();
+  desired = grad.mult(boid.maxSpeed * 0.9);
+}
+if (typeof api !== 'undefined' && api && api.depositTrail) {
+  api.depositTrail(boid.pos.x, boid.pos.y, 0.8);
+}
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x=boid.pos.x,y=boid.pos.y;
+  api.addDrawable((ctx)=>{
+    ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x + desired.x*8, y + desired.y*8);
+    ctx.strokeStyle = exploring ? 'hsla(' + (((config.hue+220)%360)) + ',100%,70%,0.25)' : 'hsla(' + (((config.hue+20)%360)) + ',100%,70%,0.25)';
+    ctx.lineWidth=1.5; ctx.stroke();
+  });
+}
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         ];
 
         // --- INITIALIZATION ---
@@ -2805,6 +3174,7 @@ return steer;` },
                     <label>Bundle
                         <select id="preset-bundle" style="background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
                             <option value="none">None</option>
+                            <option value="ai-ml-pack">AI/ML Pack</option>
                             <option value="flash-showcase">Flash Showcase</option>
                             <option value="interaction-pack">Interaction Pack</option>
                             <option value="flow-pack">Flow Pack</option>
@@ -2975,14 +3345,14 @@ return steer;` },
                     <li><code>presetIncludeCore</code>: boolean — include core rules in batch</li>
                     <li><code>presetCount</code>: number — default count for batch presets</li>
                     <li><code>presetTheme</code>: string — one of <code>any</code>, <code>flash</code>, <code>mouse</code>, <code>click</code>, <code>drag</code>, <code>flow</code>, <code>orbit</code>, <code>edge</code>, <code>trail</code>, <code>color</code>, <code>group</code>, <code>speed</code>, <code>templates</code></li>
-                    <li><code>presetBundle</code>: string — one of <code>none</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
+                    <li><code>presetBundle</code>: string — one of <code>none</code>, <code>ai-ml-pack</code>, <code>flash-showcase</code>, <code>interaction-pack</code>, <code>flow-pack</code>, <code>trail-pack</code>, <code>core-plus-flash</code></li>
                     <li><code>randomPresets</code>: boolean|number — when true/number, loads random presets on start; number picks that many</li>
                 </ul>
                 <h4>Examples</h4>
                 <ul>
                     <li><code>${urlBase}?presetIncludeCore=false&amp;presetTheme=flash&amp;randomPresets=true</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetCount=6&amp;presetTheme=mouse&amp;randomPresets=6</code></li>
-                    <li><code>${urlBase}?presetIncludeCore=true&amp;presetBundle=flow-pack</code></li>
+                    <li><code>${urlBase}?presetIncludeCore=true&amp;presetBundle=ai-ml-pack</code></li>
                     <li><code>${urlBase}?debug=true&amp;hue=320&amp;boidCount=300</code></li>
                 </ul>
                 <h3>Change Log</h3>
@@ -3316,7 +3686,7 @@ return steer;` },
             bar.appendChild(label);
             const sel = document.createElement('select'); sel.title = 'Presets (grouped by category)';
             const groups = categorizePresets();
-            const order = ['Templates', 'Core', 'Nature', 'AI / ML / CS', 'Physics', 'Math', 'Visual', 'Other'];
+            const order = ['Core', 'AI / ML / CS', 'Physics', 'Math', 'Nature', 'Visual', 'Templates', 'Other'];
             order.forEach(label => {
                 if (!groups[label] || groups[label].length === 0) return;
                 const og = document.createElement('optgroup'); og.label = label;
@@ -3374,16 +3744,16 @@ return steer;` },
         }
 
         function categorizePresets() {
-            const groups = { 'Templates': [], 'Core': [], 'Nature': [], 'AI / ML / CS': [], 'Physics': [], 'Math': [], 'Visual': [], 'Other': [] };
+            const groups = { 'Core': [], 'AI / ML / CS': [], 'Physics': [], 'Math': [], 'Nature': [], 'Visual': [], 'Templates': [], 'Other': [] };
             for (const p of rulePresets) {
                 const name = p.name || '';
-                if (/^Template\b|^Drawable Template\b/i.test(name)) groups['Templates'].push(p);
-                else if (/\(Core\)/i.test(name) || /-core$/.test(p.id)) groups['Core'].push(p);
-                else if (/^Nature\b/i.test(name)) groups['Nature'].push(p);
-                else if (/^(AI|CS)\b|AI —|AI\s—|AI\s-/i.test(name)) groups['AI / ML / CS'].push(p);
+                if (/\(Core\)/i.test(name) || /-core$/.test(p.id)) groups['Core'].push(p);
+                else if (/^(AI|ML|CS)\b|AI\s?[—-]|ML\s?[—-]|CS\s?[—-]/i.test(name)) groups['AI / ML / CS'].push(p);
                 else if (/^Physics\b/i.test(name)) groups['Physics'].push(p);
                 else if (/^Math\b/i.test(name)) groups['Math'].push(p);
+                else if (/^Nature\b/i.test(name)) groups['Nature'].push(p);
                 else if (/^Visual\b/i.test(name)) groups['Visual'].push(p);
+                else if (/^Template\b|^Drawable Template\b/i.test(name)) groups['Templates'].push(p);
                 else groups['Other'].push(p);
             }
             return groups;
@@ -3585,9 +3955,17 @@ return steer;` },
             const bundles = {
                 'flash-showcase': ['spark-burst','glow-orb','comet-flares','shockwave-rings','twinkle-trails'],
                 'interaction-pack': ['mouse-vortex','mouse-attract','click-explosion','drag-wind-gust','drag-line-tractor'],
-                'flow-pack': ['sine-flow-field','twin-vortices','orbit-centroid','lane-weave'],
+                'flow-pack': ['sine-flow-field','twin-vortices','orbital-centroid','lane-weave'],
                 'trail-pack': ['template-trail-heatmap','trail-mesh','comet-flares','template-drawable-streak'],
-                'core-plus-flash': ['cohesion-core','alignment-core','separation-core','glow-orb']
+                'core-plus-flash': ['cohesion-core','alignment-core','separation-core','glow-orb'],
+                'ai-ml-pack': [
+                    'ai-transformer-attention',
+                    'ml-kmeans-centroids',
+                    'ml-gaussian-mixture',
+                    'ai-epsilon-greedy',
+                    'ai-pca-principal-flow',
+                    'ai-perceptron-boundary'
+                ]
             };
             const ids = bundles[bundleKey] || [];
             const selected = [];
