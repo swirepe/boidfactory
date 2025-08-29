@@ -1210,6 +1210,15 @@ const targetDist = 120;
 const tang = new Vector(-toM.y, toM.x).normalize();
 const radial = (d - targetDist) / targetDist;
 const desired = tang.mult(boid.maxSpeed * 0.7).add(toM.normalize().mult(boid.maxSpeed * 0.3 * (-radial)));
+// Visual: draw faint orbit ring around the mouse occasionally
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.08) {
+  const cx = mp.x, cy = mp.y, R = targetDist;
+  api.addDrawable((ctx) => {
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'hsla(' + (((config.hue + 40) % 360)) + ', 100%, 60%, 0.12)';
+    ctx.lineWidth = 1; ctx.stroke();
+  });
+}
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
           // ——— Nature-Inspired (10) ———
@@ -1297,6 +1306,11 @@ if (toC.mag() === 0) return new Vector();
 const tang = new Vector(-toC.y, toC.x).normalize();
 const radial = toC.clone().normalize().mult(0.3);
 const desired = tang.mult(boid.maxSpeed * 0.8).add(radial.mult(boid.maxSpeed * 0.2));
+// Visual: mark thermal center with a soft dot
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.08) {
+  const x = cx, y = cy;
+  api.addDrawable((ctx) => { ctx.beginPath(); ctx.arc(x, y, 5, 0, Math.PI * 2); ctx.fillStyle = 'hsla(' + (config.hue) + ', 100%, 70%, 0.18)'; ctx.fill(); });
+}
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
           { id: 'nature-wolf-encircle', name: 'Nature — Pack Encircle (Mouse)', code: `/**
@@ -1313,6 +1327,16 @@ const targetR = 140;
 const posOnRing = new Vector(Math.cos(baseAng), Math.sin(baseAng)).mult(targetR);
 const targetPt = mp.clone().add(posOnRing);
 const desired = Vector.sub(targetPt, boid.pos).normalize().mult(boid.maxSpeed * 0.9);
+// Visual: ring and spoke to target (sparse)
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.08) {
+  const cx = mp.x, cy = mp.y, R = targetR, tx = targetPt.x, ty = targetPt.y;
+  api.addDrawable((ctx) => {
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI * 2);
+    ctx.strokeStyle = 'hsla(' + (((config.hue + 20) % 360)) + ', 100%, 60%, 0.12)'; ctx.lineWidth = 1; ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(cx, cy); ctx.lineTo(tx, ty);
+    ctx.strokeStyle = 'hsla(' + (config.hue) + ', 100%, 70%, 0.12)'; ctx.lineWidth = 1; ctx.stroke();
+  });
+}
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
           { id: 'nature-murmuration-accel', name: 'Nature — Murmuration (Accel Coupling)', code: `/**
@@ -1472,6 +1496,14 @@ arr.sort((a,b)=>a.d-b.d);
 let acc = new Vector(); let wsum = 0; for (let i=0;i<Math.min(k,arr.length);i++){ const w=1/arr[i].d; acc.add(arr[i].o.vel.clone().mult(w)); wsum+=w; }
 if (!wsum) return new Vector();
 const desired = acc.div(wsum).normalize().mult(boid.maxSpeed);
+// Visual: lines to attended neighbors (sparse)
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.12) {
+  const bx = boid.pos.x, by = boid.pos.y; const take = Math.min(k, arr.length);
+  api.addDrawable((ctx) => {
+    ctx.strokeStyle = 'hsla(' + (((config.hue + 80) % 360)) + ', 100%, 70%, 0.12)'; ctx.lineWidth = 1;
+    for (let i = 0; i < take; i++) { ctx.beginPath(); ctx.moveTo(bx, by); ctx.lineTo(arr[i].o.pos.x, arr[i].o.pos.y); ctx.stroke(); }
+  });
+}
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
           { id: 'ai-decision-tree', name: 'AI — Decision Tree (Stateful Guard)', code: `/**
@@ -1507,6 +1539,13 @@ for (const o of neighbors) {
   const sr = sigma / r; const sr6 = Math.pow(sr,6); const sr12 = sr6*sr6;
   const mag = 24*epsilon*((2*sr12) - sr6) / r; // derivative scaled
   F.add(rVec.normalize().mult(mag));
+}
+// Visual: local connection mesh (sparse)
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.08) {
+  api.addDrawable((ctx) => {
+    ctx.strokeStyle = 'hsla(' + (((config.hue + 140) % 360)) + ', 100%, 65%, 0.1)'; ctx.lineWidth = 1;
+    for (const o of neighbors) { const d = Vector.dist(boid.pos, o.pos); if (d < config.perceptionRadius * 0.6) { ctx.beginPath(); ctx.moveTo(boid.pos.x, boid.pos.y); ctx.lineTo(o.pos.x, o.pos.y); ctx.stroke(); } }
+  });
 }
 return F.limit(boid.maxForce);` },
 
@@ -1553,6 +1592,11 @@ return Vector.sub(perp, boid.vel).limit(boid.maxForce*0.8);` },
 */
 const L = 90;
 const field = new Vector(Math.sin(boid.pos.y / L), -Math.sin(boid.pos.x / L)).mult(boid.maxSpeed*0.8);
+// Visual: field hint arrow (sparse)
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.12) {
+  const x = boid.pos.x, y = boid.pos.y; const fx = field.x * 0.2, fy = field.y * 0.2;
+  api.addDrawable((ctx) => { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + fx, y + fy); ctx.strokeStyle = 'hsla(' + (config.hue) + ', 100%, 70%, 0.18)'; ctx.lineWidth = 1; ctx.stroke(); });
+}
 return Vector.sub(field, boid.vel).limit(boid.maxForce);` },
 
           { id: 'math-lissajous', name: 'Math — Lissajous Driver', code: `/**
@@ -1596,6 +1640,11 @@ if (toC.mag() === 0) return new Vector();
 const phi = (1 + Math.sqrt(5)) / 2; // golden ratio
 const tang = new Vector(-toC.y, toC.x).normalize();
 const desired = toC.normalize().mult(boid.maxSpeed*0.5).add(tang.mult(boid.maxSpeed*0.5/phi));
+// Visual: tiny spiral stroke fragment (sparse)
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.1) {
+  const x = boid.pos.x, y = boid.pos.y; const vx = desired.x * 0.25, vy = desired.y * 0.25;
+  api.addDrawable((ctx) => { ctx.beginPath(); ctx.moveTo(x, y); ctx.quadraticCurveTo(x + vy * 0.5, y - vx * 0.5, x + vx, y + vy); ctx.strokeStyle = 'hsla(' + (((config.hue + 300) % 360)) + ', 100%, 70%, 0.15)'; ctx.lineWidth = 1; ctx.stroke(); });
+}
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
           { id: 'math-fibonacci-spacing', name: 'Math — Fibonacci Spacing', code: `/**
@@ -1612,6 +1661,228 @@ const dir = Vector.sub(near.pos, boid.pos);
 const sign = dmin > rest ? 1 : -1;
 const desired = dir.normalize().mult(sign * boid.maxSpeed * Math.min(1, Math.abs(dmin-rest)/rest));
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          // ——— Visual Showcase (20) ———
+          { id: 'visual-comet-trails', name: 'Visual — Comet Trails', code: `/**
+  Comet Trails
+  Draw short streaks behind boids; gentle forward bias.
+  @returns {Vector}
+*/
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.25) {
+  const x=boid.pos.x,y=boid.pos.y; const t=boid.vel.clone().normalize().mult(10);
+  api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x-t.x, y-t.y); ctx.lineTo(x, y); ctx.strokeStyle='hsla(' + (boid.hue) + ',100%,70%,0.28)'; ctx.lineWidth=1.5; ctx.stroke(); });
+}
+return boid.vel.clone().normalize().mult(0.001);` },
+
+          { id: 'visual-ribbon-curves', name: 'Visual — Ribbon Curves', code: `/**
+  Ribbon Curves
+  Curvy quadratic strokes along velocity normals; slight lateral steer.
+  @returns {Vector}
+*/
+const n = new Vector(-boid.vel.y, boid.vel.x).normalize();
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.18){
+  const x=boid.pos.x,y=boid.pos.y; const v=boid.vel.clone().normalize().mult(12);
+  api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x-v.x, y-v.y); ctx.quadraticCurveTo(x+n.x*6, y+n.y*6, x+v.x*0.4, y+v.y*0.4); ctx.strokeStyle='hsla(' + (((boid.hue+40)%360)) + ',100%,65%,0.22)'; ctx.lineWidth=1.2; ctx.stroke(); });
+}
+return n.mult(0.002);` },
+
+          { id: 'visual-pulse-rings', name: 'Visual — Pulse Rings', code: `/**
+  Pulse Rings
+  Soft rings that expand from boid positions; minimal steering.
+  @returns {Vector}
+*/
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.08){
+  const x=boid.pos.x,y=boid.pos.y,r=6+Math.random()*10;
+  api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+80)%360)) + ',100%,70%,0.2)'; ctx.lineWidth=1; ctx.stroke();});
+}
+return new Vector();` },
+
+          { id: 'visual-starburst', name: 'Visual — Starburst', code: `/**
+  Starburst
+  Short cross lines at select boids; slight radial push.
+  @returns {Vector}
+*/
+const sp = boid.vel.clone().normalize(); const pr = new Vector(-sp.y, sp.x);
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.06){
+  const x=boid.pos.x,y=boid.pos.y; const L=8;
+  api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+120)%360)) + ',100%,75%,0.22)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x-L*sp.x,y-L*sp.y); ctx.lineTo(x+L*sp.x,y+L*sp.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x-L*pr.x,y-L*pr.y); ctx.lineTo(x+L*pr.x,y+L*pr.y); ctx.stroke();});
+}
+return sp.mult(0.002);` },
+
+          { id: 'visual-aurora-bands', name: 'Visual — Aurora Bands', code: `/**
+  Aurora Bands
+  Horizontal translucent bands tied to y; no steering.
+  @returns {Vector}
+*/
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.05){
+  const y=boid.pos.y; const h=12;
+  api.addDrawable((ctx)=>{ ctx.fillStyle='hsla(' + (((config.hue+180)%360)) + ',100%,60%,0.06)'; ctx.fillRect(0,y-h/2,gameState.width,h); });
+}
+return new Vector();` },
+
+          { id: 'visual-flow-ribbons', name: 'Visual — Flow Ribbons', code: `/**
+  Flow Ribbons
+  Draw two offset strokes along velocity; slight forward drive.
+  @returns {Vector}
+*/
+const dir = boid.vel.clone().normalize(); const ort = new Vector(-dir.y, dir.x);
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.2){
+  const x=boid.pos.x,y=boid.pos.y; const L=14;
+  api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (boid.hue) + ',100%,70%,0.18)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x+ort.x*2,y+ort.y*2); ctx.lineTo(x+dir.x*L+ort.x*2,y+dir.y*L+ort.y*2); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x-ort.x*2,y-ort.y*2); ctx.lineTo(x+dir.x*L-ort.x*2,y+dir.y*L-ort.y*2); ctx.stroke();});
+}
+return dir.mult(0.002);` },
+
+          { id: 'visual-fireflies', name: 'Visual — Fireflies', code: `/**
+  Fireflies
+  Twinkling dots with slight wander.
+  @returns {Vector}
+*/
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.15){
+  const x=boid.pos.x,y=boid.pos.y; const a=0.2+Math.random()*0.5;
+  api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y,1.8,0,Math.PI*2); ctx.fillStyle='hsla(' + (boid.hue) + ',100%,80%,' + a.toFixed(2) + ')'; ctx.fill(); });
+}
+return Vector.random2D().mult(0.003);` },
+
+          { id: 'visual-vortex-spirals', name: 'Visual — Vortex Spirals', code: `/**
+  Vortex Spirals
+  Spiral glyphs perpendicular to velocity; slight swirl.
+  @returns {Vector}
+*/
+const nrm=new Vector(-boid.vel.y, boid.vel.x).normalize();
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.08){
+  const x=boid.pos.x,y=boid.pos.y; const r=8;
+  api.addDrawable((ctx)=>{ ctx.beginPath(); for(let a=0;a<Math.PI*1.5;a+=0.3){ const R=r*a/(Math.PI*1.5); const px=x+Math.cos(a)*R, py=y+Math.sin(a)*R; if(a===0)ctx.moveTo(px,py); else ctx.lineTo(px,py);} ctx.strokeStyle='hsla(' + (((config.hue+220)%360)) + ',100%,70%,0.18)'; ctx.lineWidth=1; ctx.stroke();});
+}
+return nrm.mult(0.002);` },
+
+          { id: 'visual-chord-weave', name: 'Visual — Chord Weave', code: `/**
+  Chord Weave
+  Connect random nearby boids to form chordal meshes.
+  @returns {Vector}
+*/
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.08){
+  const bx=boid.pos.x,by=boid.pos.y; const maxL=config.perceptionRadius*0.5;
+  api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+260)%360)) + ',100%,70%,0.10)'; ctx.lineWidth=1; for(const o of neighbors){ const d=Vector.dist(boid.pos,o.pos); if(d<maxL && Math.random()<0.2){ ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(o.pos.x,o.pos.y); ctx.stroke(); } } });
+}
+return new Vector();` },
+
+          { id: 'visual-lattice-ripples', name: 'Visual — Lattice Ripples', code: `/**
+  Lattice Ripples
+  Horizontal/vertical hints forming a loose lattice.
+  @returns {Vector}
+*/
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.07){
+  const x=boid.pos.x,y=boid.pos.y,dx=10,dy=10;
+  api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+20)%360)) + ',100%,60%,0.08)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x-dx,y); ctx.lineTo(x+dx,y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x,y-dy); ctx.lineTo(x,y+dy); ctx.stroke();});
+}
+return new Vector();` },
+
+          { id: 'visual-kaleido-fan', name: 'Visual — Kaleido Fan', code: `/**
+  Kaleido Fan
+  Short fan of rays from boid heading.
+  @returns {Vector}
+*/
+const d=boid.vel.clone().normalize(); const ang=Math.atan2(d.y,d.x);
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.06){
+  const x=boid.pos.x,y=boid.pos.y; const rays=5; const L=12;
+  api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+300)%360)) + ',100%,70%,0.15)'; ctx.lineWidth=1; for(let i=-2;i<=2;i++){ const a=ang+i*0.12; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+Math.cos(a)*L,y+Math.sin(a)*L); ctx.stroke(); }});
+}
+return d.mult(0.002);` },
+
+          { id: 'visual-petal-swirl', name: 'Visual — Petal Swirl', code: `/**
+  Petal Swirl
+  Petal-like arcs around moving boids.
+  @returns {Vector}
+*/
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.08){
+  const x=boid.pos.x,y=boid.pos.y; const r=7; const n=4;
+  api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+340)%360)) + ',100%,70%,0.18)'; ctx.lineWidth=1; for(let i=0;i<n;i++){ const a=i*(Math.PI*2/n); ctx.beginPath(); ctx.arc(x+Math.cos(a)*r,y+Math.sin(a)*r, r*0.6, a-0.8, a+0.8); ctx.stroke(); } });
+}
+return new Vector();` },
+
+          { id: 'visual-tide-lines', name: 'Visual — Tide Lines', code: `/**
+  Tide Lines
+  Faint angled stripes; minimal steer along stripe.
+  @returns {Vector}
+*/
+const a=0.4; const dir=new Vector(Math.cos(a),Math.sin(a));
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.05){
+  const y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+30)%360)) + ',100%,65%,0.06)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(0,y); ctx.lineTo(gameState.width,y+Math.tan(a)*gameState.width); ctx.stroke(); });
+}
+return dir.mult(0.001);` },
+
+          { id: 'visual-wave-interference', name: 'Visual — Wave Interference', code: `/**
+  Wave Interference
+  Concentric arcs offset by phase; mild oscillatory steer.
+  @returns {Vector}
+*/
+const t=performance.now()*0.002; const w=0.6; const osc=Math.sin(t+w*boid.pos.x*0.02);
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.06){
+  const x=boid.pos.x,y=boid.pos.y,r=8+osc*4; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+200)%360)) + ',100%,70%,0.12)'; ctx.stroke(); });
+}
+return boid.vel.clone().normalize().mult(0.0015*osc);` },
+
+          { id: 'visual-orbit-petals', name: 'Visual — Orbit Petals', code: `/**
+  Orbit Petals
+  Petal arcs around the mouse position; draws only when pressed.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp=new Vector(mouse.pos.x,mouse.pos.y); const toM=Vector.sub(mp,boid.pos); const tang=new Vector(-toM.y,toM.x).normalize();
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.1){
+  const x=mp.x,y=mp.y,r=120; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y,r,Math.atan2(tang.y,tang.x)-0.3, Math.atan2(tang.y,tang.x)+0.3); ctx.strokeStyle='hsla(' + (((config.hue+40)%360)) + ',100%,65%,0.15)'; ctx.lineWidth=1; ctx.stroke();});
+}
+return Vector.sub(tang.mult(boid.maxSpeed*0.6), boid.vel).limit(boid.maxForce*0.6);` },
+
+          { id: 'visual-braids', name: 'Visual — Braids', code: `/**
+  Braids
+  Paired offset strokes that weave as velocities change.
+  @returns {Vector}
+*/
+const dvec=boid.vel.clone().normalize(); const o=new Vector(-dvec.y,dvec.x).mult(3);
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.18){
+  const x=boid.pos.x,y=boid.pos.y,L=14; api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+280)%360)) + ',100%,70%,0.14)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x+o.x,y+o.y); ctx.lineTo(x+dvec.x*L+o.x,y+dvec.y*L+o.y); ctx.stroke(); ctx.beginPath(); ctx.moveTo(x-o.x,y-o.y); ctx.lineTo(x+dvec.x*L-o.x,y+dvec.y*L-o.y); ctx.stroke();});
+}
+return dvec.mult(0.002);` },
+
+          { id: 'visual-constellation-lines', name: 'Visual — Constellation Lines', code: `/**
+  Constellation Lines
+  Connect sparse nearby boids to form constellations.
+  @returns {Vector}
+*/
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.04){
+  const bx=boid.pos.x,by=boid.pos.y; api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+90)%360)) + ',100%,70%,0.12)'; ctx.lineWidth=1; for(const o of neighbors){ const d=Vector.dist(boid.pos,o.pos); if(d<80 && Math.random()<0.05){ ctx.beginPath(); ctx.moveTo(bx,by); ctx.lineTo(o.pos.x,o.pos.y); ctx.stroke(); } } });
+}
+return new Vector();` },
+
+          { id: 'visual-shockwave-rings', name: 'Visual — Shockwave Rings', code: `/**
+  Shockwave Rings
+  Radiating rings from the mouse when pressed; boids mildly flee.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp=new Vector(mouse.pos.x,mouse.pos.y); const d=Vector.dist(boid.pos,mp); const dir=Vector.sub(boid.pos,mp).normalize();
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const r= (performance.now()/12)%200; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(mp.x,mp.y,r,0,Math.PI*2); ctx.strokeStyle='hsla(' + (config.hue) + ',100%,65%,0.18)'; ctx.lineWidth=1; ctx.stroke();}); }
+return dir.mult(boid.maxSpeed*Math.max(0, 1-d/200)).sub(boid.vel).limit(boid.maxForce);` },
+
+          { id: 'visual-heartline-field', name: 'Visual — Heartline Field', code: `/**
+  Heartline Field
+  Draw bezier heart curves centered on boids; low-force drift.
+  @returns {Vector}
+*/
+if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.04){
+  const x=boid.pos.x,y=boid.pos.y,s=6;
+  api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+330)%360)) + ',100%,70%,0.18)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x, y-s); ctx.bezierCurveTo(x-s, y-s*1.6, x-s*1.2, y, x, y+s); ctx.moveTo(x, y-s); ctx.bezierCurveTo(x+s, y-s*1.6, x+s*1.2, y, x, y+s); ctx.stroke();});
+}
+return new Vector();` },
+
+          { id: 'visual-neon-echoes', name: 'Visual — Neon Echoes', code: `/**
+  Neon Echoes
+  Two echoing outlines trailing behind boids.
+  @returns {Vector}
+*/
+const u=boid.vel.clone().normalize(); if (typeof api!=='undefined'&&api&&api.addDrawable&&Math.random()<0.2){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.strokeStyle='hsla(' + (((config.hue+20)%360)) + ',100%,70%,0.16)'; ctx.lineWidth=1; ctx.beginPath(); ctx.moveTo(x-u.x*6,y-u.y*6); ctx.lineTo(x-u.x*2,y-u.y*2); ctx.stroke(); ctx.strokeStyle='hsla(' + (((config.hue+200)%360)) + ',100%,70%,0.12)'; ctx.beginPath(); ctx.moveTo(x-u.x*10,y-u.y*10); ctx.lineTo(x-u.x*6,y-u.y*6); ctx.stroke();}); }
+return u.mult(0.002);` },
         ];
 
         // --- INITIALIZATION ---
@@ -2295,7 +2566,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             bar.appendChild(label);
             const sel = document.createElement('select'); sel.title = 'Presets (grouped by category)';
             const groups = categorizePresets();
-            const order = ['Core', 'Nature', 'AI / ML / CS', 'Physics', 'Math', 'Other'];
+            const order = ['Core', 'Nature', 'AI / ML / CS', 'Physics', 'Math', 'Visual', 'Other'];
             order.forEach(label => {
                 if (!groups[label] || groups[label].length === 0) return;
                 const og = document.createElement('optgroup'); og.label = label;
@@ -2346,7 +2617,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         }
 
         function categorizePresets() {
-            const groups = { 'Core': [], 'Nature': [], 'AI / ML / CS': [], 'Physics': [], 'Math': [], 'Other': [] };
+            const groups = { 'Core': [], 'Nature': [], 'AI / ML / CS': [], 'Physics': [], 'Math': [], 'Visual': [], 'Other': [] };
             for (const p of rulePresets) {
                 const name = p.name || '';
                 if (/\(Core\)/i.test(name) || /-core$/.test(p.id)) groups['Core'].push(p);
@@ -2354,6 +2625,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 else if (/^(AI|CS)\b|AI —|AI\s—|AI\s-/i.test(name)) groups['AI / ML / CS'].push(p);
                 else if (/^Physics\b/i.test(name)) groups['Physics'].push(p);
                 else if (/^Math\b/i.test(name)) groups['Math'].push(p);
+                else if (/^Visual\b/i.test(name)) groups['Visual'].push(p);
                 else groups['Other'].push(p);
             }
             return groups;
