@@ -54,3 +54,13 @@
  - Codex CLI Agent — signed on 2025-08-28, added live count resizing, vision radius viz (one/all), click/drag behavior variety, flow-driven color + glow, default quadtree/flow viz, and edge safety for non-wrap.
  - Codex CLI Agent — signed on 2025-08-28, hide header/subheader by default in CLI -count mode (Go generator).
  - Codex CLI Agent — signed on 2025-08-28, added animated auto timer bar in viewer page header (template.html).
+ - Codex CLI Agent — signed on 2025-08-28, rewrote boidlabv1.2.html in a clean, readable, well-documented style.
+ - Codex CLI Agent — signed on 2025-08-28, reformatted boidlabv1.2.html and enhanced example rule documentation.
+ - Codex CLI Agent — signed on 2025-08-28, added code pane docking (bottom/left/maximized) to boidlabv1.2.html.
+ - Codex CLI Agent — signed on 2025-08-28, added maximized split view, overlay hiding, minimalist editor icon for minimized left dock, and resizable left dock width.
+ - Codex CLI Agent — signed on 2025-08-28, refined dock mode selector to subtle icon-only controls.
+ - Codex CLI Agent — signed on 2025-08-28, moved dock icons into tabs row as large icons.
+ - Codex CLI Agent — signed on 2025-08-28, hide-left minimization with temporary Code overlay button; ensured overlays hidden when maximized.
+ - Codex CLI Agent — signed on 2025-08-28, added fade/slide transitions for temporary Code overlay button.
+ - Codex CLI Agent — signed on 2025-08-28, clarified rule API/scope in example code and added CodeMirror autocomplete.
+ - Codex CLI Agent — signed on 2025-08-28, enriched rule docs with JSDoc and dynamic config-key hints.

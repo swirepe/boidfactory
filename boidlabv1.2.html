@@ -286,6 +286,7 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/lint.min.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/show-hint.min.css">
 </head>
 <body>
     <canvas id="boids-canvas"></canvas>
@@ -352,6 +353,8 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jshint/2.13.4/jshint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/lint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/lint/javascript-lint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/show-hint.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/addon/hint/javascript-hint.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.7.1/chart.min.js"></script>
     
     <script>
@@ -401,6 +404,7 @@
             limit(max) { if (this.mag() > max) { this.normalize().mult(max); } return this; }
             heading() { return Math.atan2(this.y, this.x); }
             clone() { return new Vector(this.x, this.y); }
+            static add(v1, v2) { return new Vector(v1.x + v2.x, v1.y + v2.y); }
             static sub(v1, v2) { return new Vector(v1.x - v2.x, v1.y - v2.y); }
             static dist(v1, v2) { return Vector.sub(v1, v2).mag(); }
             static random2D() { const angle = Math.random() * Math.PI * 2; return new Vector(Math.cos(angle), Math.sin(angle)); }
@@ -608,13 +612,21 @@
         // --- DEFAULT USER FUNCTIONS ---
         
         const defaultFunctionsCode = {
-          cohesion: `/*
-  Cohesion: Steer toward the average position of nearby boids.
-  Inputs: boid, neighbors, config, Vector
-  Returns: Vector steering force (must be a Vector)
+          cohesion: `/**
+  Rule API
+  @function rule
+  @param {Boid} boid - Current boid under update (pos, vel, acc, maxSpeed, maxForce, size, hue)
+  @param {{boids: Boid[], quadtree: any, width: number, height: number}} gameState - Global sim state
+  @param {Boid[]} neighbors - Nearby boids (pre-filtered by perception)
+  @param {Object} config - Live configuration (e.g., perceptionRadius, weights, boidShape, etc.)
+  @param {{pos: {x:number, y:number}, down: boolean}} mouse - Pointer state
+  @param {typeof Vector} Vector - 2D vector helper class
+  @returns {Vector} Steering force to apply this frame
+
+  Cohesion: steer toward the average position of nearby boids.
   Steps:
     1) Average neighbor positions within perception radius
-    2) Desired velocity toward that center, at maxSpeed
+    2) Desired velocity toward that center at maxSpeed
     3) Steering = desired - current velocity, limited to maxForce
 */
 const radius = config.perceptionRadius;
@@ -634,8 +646,18 @@ center.div(total);
 const desired = Vector.sub(center, boid.pos).normalize().mult(boid.maxSpeed);
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);`,
 
-          separation: `/*
-  Separation: Steer away from nearby boids to avoid crowding.
+          separation: `/**
+  Rule API
+  @function rule
+  @param {Boid} boid
+  @param {{boids: Boid[], quadtree: any, width: number, height: number}} gameState
+  @param {Boid[]} neighbors
+  @param {Object} config
+  @param {{pos: {x:number,y:number}, down: boolean}} mouse
+  @param {typeof Vector} Vector
+  @returns {Vector}
+
+  Separation: steer away from nearby boids to avoid crowding.
   Strategy: Inverse-square falloff (1/d^2) gives strong close-range repulsion.
   Tip: Slightly higher force multiplier helps quick response.
 */
@@ -658,8 +680,18 @@ if (total === 0) return new Vector(0, 0);
 steer.div(total).normalize().mult(boid.maxSpeed);
 return Vector.sub(steer, boid.vel).limit(boid.maxForce * 1.5);`,
 
-          alignment: `/*
-  Alignment: Match the average heading (velocity) of neighbors.
+          alignment: `/**
+  Rule API
+  @function rule
+  @param {Boid} boid
+  @param {{boids: Boid[], quadtree: any, width: number, height: number}} gameState
+  @param {Boid[]} neighbors
+  @param {Object} config
+  @param {{pos: {x:number,y:number}, down: boolean}} mouse
+  @param {typeof Vector} Vector
+  @returns {Vector}
+
+  Alignment: match the average heading (velocity) of neighbors.
 */
 const radius = config.perceptionRadius;
 let avgVel = new Vector(0, 0);
@@ -677,9 +709,19 @@ if (total === 0) return new Vector(0, 0);
 avgVel.div(total).normalize().mult(boid.maxSpeed);
 return Vector.sub(avgVel, boid.vel).limit(boid.maxForce);`,
 
-          novel: `/*
-  Novel: Mouse-driven flee force when mouse is down.
-  Behavior: If within fleeRadius of the cursor, push away proportionally.
+          novel: `/**
+  Rule API
+  @function rule
+  @param {Boid} boid
+  @param {{boids: Boid[], quadtree: any, width: number, height: number}} gameState
+  @param {Boid[]} neighbors
+  @param {Object} config
+  @param {{pos: {x:number,y:number}, down: boolean}} mouse
+  @param {typeof Vector} Vector
+  @returns {Vector}
+
+  Novel: mouse-driven flee force when mouse is down.
+  Behavior: if within fleeRadius of the cursor, push away proportionally.
 */
 const mouseForce = new Vector(0, 0);
 const mousePos = new Vector(mouse.pos.x, mouse.pos.y);
@@ -1019,12 +1061,48 @@ return mouseForce;`
                 });
             });
 
+            // Provide lightweight autocompletion with in-scope symbols and common vectors
+            function ruleHint(editor) {
+                const cur = editor.getCursor();
+                const token = editor.getTokenAt(cur);
+                const start = token.start;
+                const end = cur.ch;
+                const word = token.string.trim();
+                const from = CodeMirror.Pos(cur.line, start);
+                const to = CodeMirror.Pos(cur.line, end);
+                const line = editor.getLine(cur.line);
+                const before = line.slice(0, cur.ch);
+                const isConfigCtx = /(^|\W)config\.$/.test(before);
+                const configKeys = Object.keys(config || {}).map(k => `config.${k}`);
+                const base = [
+                    'boid', 'boid.pos', 'boid.vel', 'boid.acc', 'boid.maxSpeed', 'boid.maxForce', 'boid.size', 'boid.hue',
+                    'gameState', 'gameState.width', 'gameState.height', 'gameState.boids', 'neighbors',
+                    'config',
+                    'mouse', 'mouse.pos.x', 'mouse.pos.y', 'mouse.down',
+                    'Vector', 'Vector.sub', 'Vector.dist', 'Vector.random2D',
+                    'add()', 'sub()', 'mult()', 'div()', 'mag()', 'normalize()', 'limit()', 'heading()', 'clone()',
+                    'return new Vector(0, 0)', 'const v = new Vector(0, 0)'
+                ];
+                const pool = isConfigCtx ? configKeys : base.concat(configKeys);
+                // Deduplicate and filter by current token
+                const seen = new Set();
+                const list = pool.filter(s => {
+                    const key = s.toLowerCase();
+                    if (seen.has(key)) return false;
+                    seen.add(key);
+                    return !word || key.startsWith(word.toLowerCase());
+                });
+                return { list, from, to };
+            }
+
             for (const fn of userFunctions) {
                 const textarea = document.querySelector(`#${fn.name} textarea`);
                 textarea.value = defaultFunctionsCode[fn.name];
                 editors[fn.name] = CodeMirror.fromTextArea(textarea, {
                     mode: 'javascript', theme: 'dracula', lineNumbers: true,
                     lint: true, gutters: ["CodeMirror-lint-markers"],
+                    extraKeys: { 'Ctrl-Space': 'autocomplete' },
+                    hintOptions: { hint: ruleHint, completeSingle: false }
                 });
 
                 // Live-compile user rule code into a function with a narrow, explicit scope.
@@ -1057,6 +1135,14 @@ return mouseForce;`
                     }
                 }, 500);
                 editors[fn.name].on('change', updateFunction);
+                // Show autocomplete as you type for convenience
+                editors[fn.name].on('inputRead', (cm, change) => {
+                    if (!change.text) return;
+                    const ch = change.text.join('');
+                    if (/^[\w\.$]$/.test(ch)) {
+                        cm.showHint({ hint: ruleHint, completeSingle: false });
+                    }
+                });
                 updateFunction(editors[fn.name]); // Initial compilation
             }
         }

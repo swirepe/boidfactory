@@ -60,3 +60,42 @@ In template.html, auto-select the first simulation on load instead of waiting fo
 ==== Prompt End ====
 in the go generator -count mode, let's not have a header or subheader unless explicitly set
 in template.html, in the page header, when the auto is active, let's animate a timer
+==== 2025-08-28T07:20:00Z Prompt Start ====
+please rewrite boidlabv1.2.html in a clean, readable, smartly-documented style
+==== Prompt End ====
+==== 2025-08-28T13:08:00Z Prompt Start ====
+please reformat boidlabv1.2.html in a clean, readable, smartly-documented style.  Pay extra attention to the formatting and documentation in the example code
+==== Prompt End ====
+==== 2025-08-28T13:12:00Z Prompt Start ====
+Let's add a way to dock the code pane to either the left or the bottom, or to view it maximized.
+==== Prompt End ====
+==== 2025-08-28T13:20:00Z Prompt Start ====
+When the code pane is maximized, let's show two editors side by side and hide the overlay buttons.
+
+When the code pane is docked to the left and minimzied, let's just show an editor icon on the left.  We need to generate an svg of an editor icon with a lofi minimalist style.
+
+add resizable dock width
+==== Prompt End ====
+==== 2025-08-28T13:28:00Z Prompt Start ====
+let's make the bottom/left/max selector more subtle; it takes up a lot of space right now
+==== Prompt End ====
+==== 2025-08-28T13:35:00Z Prompt Start ====
+Let's have these selector icons as 3 large icons on the same row as the tabs
+==== Prompt End ====
+==== 2025-08-28T13:40:00Z Prompt Start ====
+while the code pane is maximized, hide the overlay buttons
+==== Prompt End ====
+==== 2025-08-28T13:46:00Z Prompt Start ====
+when the code pane is docked left and minimized, hide it completely and add a new temporary overlay button "code" that brings it back.  When the code pane is maximized, make sure that all of the overlay buttons are hidden
+==== Prompt End ====
+==== 2025-08-28T13:52:00Z Prompt Start ====
+add subtle fade/slide transitions when the code overlay button comes and goes
+==== Prompt End ====
+==== 2025-08-28T13:58:00Z Prompt Start ====
+Update the example code to make it clear to the user what variables are in scope, and the api of the function they are implementing.
+
+Add autocomplete to codemirror.
+==== Prompt End ====
+==== 2025-08-28T14:05:00Z Prompt Start ====
+yes please
+==== Prompt End ====
