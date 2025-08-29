@@ -922,11 +922,11 @@ return new Vector();` },
   Draws a short line along current velocity; minimal forward bias.
   @returns {Vector}
 */
-const v = boid.vel.clone().normalize().mult(10);
+const v = boid.vel.clone().normalize().mult(18);
 if (typeof api !== 'undefined' && api && api.addDrawable) {
   const x = boid.pos.x, y = boid.pos.y;
   api.addDrawable(function(ctx){
-    ctx.beginPath(); ctx.moveTo(x - v.x, y - v.y); ctx.lineTo(x, y);
+    ctx.beginPath(); ctx.moveTo(x - v.x, y - v.y); ctx.lineTo(x + v.x * 0.3, y + v.y * 0.3);
     ctx.strokeStyle = 'hsla(' + (boid.hue) + ',100%,70%,0.25)'; ctx.lineWidth = 1.5; ctx.stroke();
   });
 }
@@ -939,6 +939,74 @@ return v.mult(0.001);` },
 */
 if (typeof api !== 'undefined' && api && api.depositTrail) {
   api.depositTrail(boid.pos.x, boid.pos.y, 1.0);
+}
+return new Vector();` },
+
+          { id: 'template-drawable-arrow', name: 'Template — Drawable Arrow', code: `/**
+  Drawable Arrow (Template)
+  Draws a velocity arrow with a small head; tiny forward bias.
+  @returns {Vector}
+*/
+const dir = boid.vel.clone().normalize();
+const L = 18; const x = boid.pos.x, y = boid.pos.y;
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  api.addDrawable(function(ctx){
+    const tipX = x + dir.x * L, tipY = y + dir.y * L;
+    const ortX = -dir.y, ortY = dir.x; // perpendicular
+    ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(tipX, tipY);
+    ctx.strokeStyle = 'hsla(' + (boid.hue) + ',100%,70%,0.28)'; ctx.lineWidth = 1.5; ctx.stroke();
+    // Arrow head
+    ctx.beginPath();
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX - dir.x * 5 + ortX * 3, tipY - dir.y * 5 + ortY * 3);
+    ctx.moveTo(tipX, tipY);
+    ctx.lineTo(tipX - dir.x * 5 - ortX * 3, tipY - dir.y * 5 - ortY * 3);
+    ctx.strokeStyle = 'hsla(' + (boid.hue) + ',100%,70%,0.28)'; ctx.lineWidth = 1; ctx.stroke();
+  });
+}
+return dir.mult(0.0015);` },
+
+          { id: 'template-drawable-petals', name: 'Template — Drawable Petals', code: `/**
+  Drawable Petals (Template)
+  Draws petal-like arcs around the boid. Purely visual.
+  @returns {Vector}
+*/
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x=boid.pos.x, y=boid.pos.y, r=8, n=5;
+  api.addDrawable(function(ctx){
+    ctx.strokeStyle='hsla(' + (boid.hue) + ',100%,70%,0.18)'; ctx.lineWidth=1;
+    for (let i=0;i<n;i++) { const a=i*(Math.PI*2/n); ctx.beginPath(); ctx.arc(x+Math.cos(a)*r, y+Math.sin(a)*r, r*0.6, a-0.7, a+0.7); ctx.stroke(); }
+  });
+}
+return new Vector();` },
+
+          { id: 'template-grid-cell-highlight', name: 'Template — Grid Cell Highlight', code: `/**
+  Grid Cell Highlight (Template)
+  Highlights the 16px grid cell the boid occupies; no steering.
+  @returns {Vector}
+*/
+const CELL=16; const cx=Math.floor(boid.pos.x/CELL)*CELL, cy=Math.floor(boid.pos.y/CELL)*CELL;
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  api.addDrawable(function(ctx){
+    ctx.strokeStyle='hsla(' + (boid.hue) + ',100%,70%,0.18)'; ctx.lineWidth=1;
+    ctx.strokeRect(cx+0.5, cy+0.5, CELL-1, CELL-1);
+  });
+}
+return new Vector();` },
+
+          { id: 'template-metrics-overlay', name: 'Template — Metrics Overlay', code: `/**
+  Metrics Overlay (Template)
+  Shows speed and neighbor count near the boid. Handy for debugging.
+  @returns {Vector}
+*/
+const speed = boid.vel.mag().toFixed(1);
+const ncount = neighbors.length;
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x=boid.pos.x, y=boid.pos.y;
+  api.addDrawable(function(ctx){
+    ctx.fillStyle = '#ddd'; ctx.font = '10px monospace'; ctx.textAlign='left';
+    ctx.fillText('v:'+speed+' n:'+ncount, x+6, y-6);
+  });
 }
 return new Vector();` },
           // Core rules
