@@ -295,6 +295,7 @@
         <button class="overlay-toggle" data-overlay="config-overlay">Config</button>
         <button class="overlay-toggle" data-overlay="stats-overlay">Stats</button>
         <button class="overlay-toggle" data-overlay="help-overlay">Help</button>
+        <button class="overlay-toggle" id="reset-button" title="Reset simulation (boids + stats)">Reset</button>
     </div>
 
     <div class="overlay" id="config-overlay"></div>
@@ -851,6 +852,13 @@ return mouseForce;`
                     if (!isVisible) targetOverlay.classList.add('visible');
                 });
             });
+            // Reset button
+            const resetBtn = document.getElementById('reset-button');
+            if (resetBtn) {
+                resetBtn.addEventListener('click', () => {
+                    hardReset();
+                });
+            }
             document.querySelectorAll('.overlay').forEach(overlay => {
                 const closeBtn = document.createElement('button');
                 closeBtn.className = 'close-button';
@@ -1166,10 +1174,36 @@ return mouseForce;`
                         const code = editor.getValue();
                         const params = ['boid', 'gameState', 'neighbors', 'config', 'mouse', 'Vector'];
                         const dynamicFunc = new Function(...params, code);
+                        const prev = fn.updateBoid;
+
+                        // Dry-run with a tiny mock to validate (no side effects expected)
+                        const mockBoid = new Boid(0, 0);
+                        const mockState = { boids: [mockBoid], quadtree: null, width: 10, height: 10 };
+                        const mockNeighbors = [];
+                        let ok = true;
+                        try {
+                            const res = dynamicFunc(mockBoid, mockState, mockNeighbors, config, mouse, Vector);
+                            // Must be Vector or falsy; non-Vector returns are tolerated as no-op
+                            if (res && !(res instanceof Vector)) ok = false;
+                        } catch (e) {
+                            ok = false;
+                        }
+                        if (!ok) throw new Error('Rule dry-run failed');
+
+                        // Adopt the new function, wrapped with runtime safety
                         fn.updateBoid = (boid, gameState, neighbors) => {
-                            return dynamicFunc(boid, gameState, neighbors, config, mouse, Vector);
+                            try {
+                                const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector);
+                                return out instanceof Vector ? out : new Vector();
+                            } catch (e) {
+                                if (!fn._lastRuntimeErrorTs || (performance.now() - fn._lastRuntimeErrorTs) > 1000) {
+                                    console.error(`Runtime error in rule '${fn.name}':`, e);
+                                    fn._lastRuntimeErrorTs = performance.now();
+                                }
+                                return new Vector();
+                            }
                         };
-                        
+
                         console.log(`Rule '${fn.name}' reloaded successfully.`);
                         logConfig(`Rule '${fn.name}' reloaded successfully.`);
                         if (tabButton) {
@@ -1178,7 +1212,8 @@ return mouseForce;`
                         }
                     } catch (e) {
                         console.error(`Error reloading rule '${fn.name}':`, e);
-                        fn.updateBoid = () => new Vector(); // Failsafe
+                        // Keep previous good function if any; else use no-op
+                        fn.updateBoid = typeof fn.updateBoid === 'function' ? fn.updateBoid : () => new Vector();
                         if (tabButton) {
                            tabButton.classList.add('reloaded-error');
                            setTimeout(() => tabButton.classList.remove('reloaded-error'), 600);
@@ -1208,6 +1243,25 @@ return mouseForce;`
             logConfig(`Created ${config.boidCount} boids.`);
         }
 
+        function hardReset() {
+            // Reset boids and stats without changing code or config
+            createBoids();
+            fpsHistory.length = 0;
+            updateTimeHistory.length = 0;
+            angleHistory.length = 0;
+            lastTime = performance.now();
+            // Clear charts if present
+            if (charts.fpsChart) { charts.fpsChart.data.datasets[0].data = []; charts.fpsChart.update('none'); }
+            if (charts.updateTimeChart) { charts.updateTimeChart.data.datasets[0].data = []; charts.updateTimeChart.update('none'); }
+            if (charts.polarCtx) {
+                const c = charts.polarCtx.canvas; charts.polarCtx.clearRect(0,0,c.width,c.height);
+            }
+            if (charts.meanPolarCtx) {
+                const c = charts.meanPolarCtx.canvas; charts.meanPolarCtx.clearRect(0,0,c.width,c.height);
+            }
+            logConfig('Simulation hard reset.');
+        }
+
         // --- MAIN LOOP ---
 
         function animate(timestamp) {
@@ -1226,7 +1280,17 @@ return mouseForce;`
             const boundary = new Rectangle(gameState.width / 2, gameState.height / 2, gameState.width / 2, gameState.height / 2);
             gameState.quadtree = new QuadTree(boundary, 4);
             for (let boid of gameState.boids) gameState.quadtree.insert(boid);
-            for (let boid of gameState.boids) boid.update(gameState);
+            // Protect simulation step from rule runtime errors
+            for (let boid of gameState.boids) {
+                try {
+                    boid.update(gameState);
+                } catch (e) {
+                    if (!update._lastErrorTs || (performance.now() - update._lastErrorTs) > 1000) {
+                        console.error('Update step error (continuing):', e);
+                        update._lastErrorTs = performance.now();
+                    }
+                }
+            }
         }
 
         function draw() {

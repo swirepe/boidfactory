@@ -102,3 +102,6 @@ yes please
 ==== 2025-08-28T14:10:00Z Prompt Start ====
 yes please
 ==== Prompt End ====
+==== 2025-08-28T14:18:00Z Prompt Start ====
+sometimes when a rule refreshes, the simulation crashes and doesn't recover.  let's add a manual "reset" button with the overlay buttons, and let's try to handle code refreshes more gracefully
+==== Prompt End ====
