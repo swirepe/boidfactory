@@ -236,6 +236,8 @@
         .split-view { display: none; }
         #code-pane.maximized.split-on .split-view { display: flex; gap: 0; align-items: stretch; }
         .split-pane { flex: 1 1 50%; min-width: 0; padding: 6px; box-sizing: border-box; }
+        /* Ensure tab contents are visible inside split panes even without 'active' */
+        #code-pane.maximized.split-on .split-view .tab-content { display: block; width: 100%; }
         .split-sash { width: 8px; cursor: col-resize; background: transparent; position: relative; z-index: 1; }
         .split-sash::before { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 2px; background: rgba(255,255,255,0.08); }
         .split-sash:hover::before { background: rgba(255,255,255,0.18); }
