@@ -268,6 +268,7 @@
         .editor-bar select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; }
         .editor-bar .bar-btn { background: transparent; border: 1px solid rgba(255,255,255,0.15); color: #ddd; padding: 2px 8px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono); font-size: 12px; opacity: 0.85; }
         .editor-bar .bar-btn:hover { opacity: 1; color: var(--primary-color); border-color: var(--primary-color); }
+        
         .split-picker select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; }
         .split-picker.split-left { justify-self: start; }
         .split-picker.split-right { justify-self: end; }
@@ -2770,7 +2771,8 @@ return steer;` },
             createSlider('visualDensity', 'Visual Density', 0, 2, 0.05, config.visualDensity);
             
             userFunctions.forEach(fn => {
-                 createSlider(`${fn.name}Weight`, `${fn.name.charAt(0).toUpperCase() + fn.name.slice(1)} Weight`, 0, 5, 0.1, config[`${fn.name}Weight`]);
+                 const labelName = fn.displayName ? fn.displayName : (fn.name.charAt(0).toUpperCase() + fn.name.slice(1));
+                 createSlider(`${fn.name}Weight`, `${labelName} Weight`, 0, 5, 0.1, config[`${fn.name}Weight`]);
             });
 
             // Rule Presets batch reset
@@ -3310,7 +3312,7 @@ return steer;` },
         function buildEditorBar(ruleName) {
             const bar = document.createElement('div'); bar.className = 'editor-bar';
             // Preset select (grouped by category)
-            const label = document.createElement('span'); label.style.color = '#ddd'; label.style.fontSize = '12px'; label.textContent = 'Presets (by category)';
+            const label = document.createElement('span'); label.style.color = '#ddd'; label.style.fontSize = '12px'; label.textContent = 'Preset:';
             bar.appendChild(label);
             const sel = document.createElement('select'); sel.title = 'Presets (grouped by category)';
             const groups = categorizePresets();
@@ -3324,6 +3326,7 @@ return steer;` },
                 sel.appendChild(og);
             });
             bar.appendChild(sel);
+            // Selected preset name is visible in the dropdown; no extra label
             // Fill button
             const fill = document.createElement('button'); fill.className='bar-btn'; fill.title='Fill with preset'; fill.textContent='Fill';
             fill.addEventListener('click', () => {
@@ -3332,9 +3335,8 @@ return steer;` },
                 if (!currentName || !p) return;
                 const ed = editors[currentName]; if (ed) ed.setValue(p.code);
                 // Always rename to the preset name for clarity (ensure unique)
-                const targetName = sanitizeRuleName(p.name);
-                if (currentName !== targetName) {
-                    renameRule(currentName, targetName);
+                if (currentName !== sanitizeRuleName(p.name)) {
+                    renameRule(currentName, p.name);
                 }
             });
             bar.appendChild(fill);
@@ -3404,7 +3406,7 @@ return steer;` },
             return preset ? preset.code : `return new Vector();`;
         }
 
-        function addRule(nameRaw, codeOverride) {
+        function addRule(nameRaw, codeOverride, displayLabel) {
             // Choose a preset for the new rule and use its name as the rule name
             if (typeof config._nextPresetIdx !== 'number') config._nextPresetIdx = 0;
             const preset = rulePresets[config._nextPresetIdx % rulePresets.length];
@@ -3416,7 +3418,7 @@ return steer;` },
             // Create tab and content
             const tabsBar = document.querySelector('.code-tabs');
             const tabBtn = document.createElement('button');
-            tabBtn.className = 'tab-button'; tabBtn.dataset.tab = name; tabBtn.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+            tabBtn.className = 'tab-button'; tabBtn.dataset.tab = name; tabBtn.textContent = displayLabel || (name.charAt(0).toUpperCase() + name.slice(1));
             tabsBar.insertBefore(tabBtn, tabsBar.querySelector('.dock-controls'));
             const content = document.createElement('div'); content.id = name; content.className = 'tab-content';
             // Per-editor toolbar
@@ -3428,7 +3430,7 @@ return steer;` },
             const ed = CodeMirror.fromTextArea(ta, { mode:'javascript', theme:'dracula', lineNumbers:true, lint:true, gutters:["CodeMirror-lint-markers"], extraKeys:{'Ctrl-Space':'autocomplete'}, hintOptions:{hint: editor => ruleHint(editor), completeSingle:false} });
             editors[name] = ed;
             // Compile function
-            const fnObj = { name, weight: 1.0, updateBoid: null };
+            const fnObj = { name, displayName: (displayLabel || (preset?.name) || name), weight: 1.0, updateBoid: null };
             userFunctions.push(fnObj);
             // Hook tab behavior
             tabBtn.addEventListener('click', () => {
@@ -3500,12 +3502,13 @@ return steer;` },
             const fnObj = userFunctions.find(u => u.name === oldName);
             if (!fnObj) return;
             fnObj.name = newName;
+            fnObj.displayName = newNameRaw;
             // Move editor mapping
             editors[newName] = editors[oldName]; delete editors[oldName];
             // Update tab button and content IDs
             const tabBtn = document.querySelector(`.tab-button[data-tab="${oldName}"]`);
             const content = document.getElementById(oldName);
-            if (tabBtn) { tabBtn.dataset.tab = newName; tabBtn.textContent = newName.charAt(0).toUpperCase()+newName.slice(1); }
+            if (tabBtn) { tabBtn.dataset.tab = newName; tabBtn.textContent = (newNameRaw || newName).toString(); }
             if (content) { content.id = newName; }
             // Update config weight key
             const oldKey = `${oldName}Weight`; const newKey = `${newName}Weight`;
@@ -3521,7 +3524,7 @@ return steer;` },
 
         function addRuleWithPreset(preset) {
             if (!preset) return;
-            addRule(preset.name, preset.code);
+            addRule(preset.name, preset.code, preset.name);
         }
 
         function resetRulesWithPresets(n, includeCore, themeKey = 'any') {
@@ -3563,8 +3566,7 @@ return steer;` },
                 const first = userFunctions[0].name;
                 const ed = editors[first];
                 if (ed) ed.setValue(selected[0].code);
-                const targetName = sanitizeRuleName(selected[0].name);
-                if (first !== targetName) renameRule(first, targetName);
+                if (first !== sanitizeRuleName(selected[0].name)) renameRule(first, selected[0].name);
                 // Delete all others for a clean slate
                 const others = userFunctions.slice(1).map(u => u.name);
                 others.forEach(nm => deleteRule(nm));
@@ -3600,8 +3602,7 @@ return steer;` },
             } else {
                 const first = userFunctions[0].name;
                 const ed = editors[first]; if (ed) ed.setValue(selected[0].code);
-                const targetName = sanitizeRuleName(selected[0].name);
-                if (first !== targetName) renameRule(first, targetName);
+                if (first !== sanitizeRuleName(selected[0].name)) renameRule(first, selected[0].name);
                 const others = userFunctions.slice(1).map(u => u.name);
                 others.forEach(nm => deleteRule(nm));
             }

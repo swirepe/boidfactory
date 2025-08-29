@@ -80,3 +80,5 @@
  - Codex CLI Agent — signed on 2025-08-29, made left dock default and added resizable left dock with persistent width.
  - Codex CLI Agent — signed on 2025-08-29, added resize tooltip and auto-focus new rule editor on creation.
  - Codex CLI Agent — signed on 2025-08-29, New button now uses currently selected preset for new rule creation.
+ - Codex CLI Agent — signed on 2025-08-29, removed extra preset label; new tab still uses human-readable preset name.
+ - Codex CLI Agent — signed on 2025-08-29, config weight labels now use the rule’s human-readable name when creating/renaming rules.
