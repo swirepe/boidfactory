@@ -2274,6 +2274,126 @@ if (typeof api !== 'undefined' && api && api.addDrawable) {
 }
 return new Vector();` },
 
+          { id: 'novel-kuramoto-aurora', name: 'Novel — Kuramoto Aurora Swarm', code: `/**
+  Kuramoto Aurora Swarm (Emergent Phase-Coupled Dynamics)
+
+  Concept
+  ————
+  Each boid carries an internal oscillator phase θ with a natural frequency ω.
+  Local, distance-limited Kuramoto coupling drives phases to form waves/spirals,
+  while steering biases create graceful, unpredictable motion. The visuals paint
+  the phase and order into glowing auroras, with occasional connections.
+
+  Mechanics (different from core rules)
+  ————————————————————————————————
+  - Phase update (per frame, small-step):
+      θ_i += ω_i + K * R * sin(μ - θ_i)
+    where μ is the mean neighbor phase and R is local order (coherence).
+  - Steering:
+      • Swirl: rotate current velocity by a small phase-dependent angle
+      • Cohere-to-wave: nudge toward local centroid scaled by cos(θ)
+      • Flow-glide: small drift along the phase-gradient proxy
+  - Visuals:
+      • Halo colored by θ (aurora); intensity by local order R
+      • Occasional links to in-phase neighbors, additive glow
+      • Faint trail deposition scaled by R
+
+  Parameters
+  ————————
+    K: coupling strength (0.06)
+    ω range: base ± jitter (base 0.02 rad/frame)
+    swirlAngle = 0.25 * sin(θ)
+
+  Returns
+  —————
+  A steering vector; Rule uses Vector API and optional api helpers.
+  */
+// ---- Phase state ----
+if (typeof boid._phase !== 'number') {
+  boid._phase = Math.random() * Math.PI * 2;
+  boid._omega = (0.02 + (Math.random()-0.5)*0.01) * (Math.random()<0.5?-1:1);
+}
+// Neighborhood stats within perception
+const Rp = (config.perceptionRadius||50);
+let sx=0, sy=0, n=0, cx=0, cy=0;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos); if (d>0 && d < Rp) {
+    const a = (typeof o._phase==='number'? o._phase : (o.hue||0)*Math.PI/180);
+    sx += Math.cos(a); sy += Math.sin(a); n++;
+    cx += o.pos.x; cy += o.pos.y;
+  }
+}
+let R = 0, mu = boid._phase; // local order and mean phase
+if (n>0) { R = Math.min(1, Math.sqrt(sx*sx + sy*sy)/n); mu = Math.atan2(sy, sx); }
+// ---- Phase update (small step) ----
+const K = 0.06; // coupling
+const dtheta = boid._omega + K * R * Math.sin(mu - boid._phase);
+boid._phase = (boid._phase + dtheta + Math.PI*2) % (Math.PI*2);
+
+// Map phase to hue for aurora
+const hue = (boid._phase * 180 / Math.PI) % 360;
+boid.hue = hue;
+
+// ---- Steering fields ----
+// Swirl: rotate velocity by a small phase-driven angle
+const swirlAngle = 0.25 * Math.sin(boid._phase);
+const v = boid.vel.clone();
+const cs = Math.cos(swirlAngle), sn = Math.sin(swirlAngle);
+const vrot = new Vector(v.x*cs - v.y*sn, v.x*sn + v.y*cs);
+let steer = Vector.sub(vrot.normalize().mult(boid.maxSpeed), boid.vel).limit(boid.maxForce*0.6);
+
+// Cohere-to-wave: toward centroid, scaled by cos(phase)
+if (n>0) {
+  cx/=n; cy/=n; const toC = new Vector(cx - boid.pos.x, cy - boid.pos.y);
+  const coh = toC.normalize().mult(boid.maxSpeed * (0.25 + 0.35*Math.max(0, Math.cos(boid._phase))))
+  steer.add(Vector.sub(coh, boid.vel).limit(boid.maxForce*0.5));
+}
+
+// Phase-gradient proxy: drift along –∇θ ≈ sum (unit to neighbor) * sin(Δθ)
+let g = new Vector();
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos); if (d>0 && d<Rp) {
+    const u = new Vector((o.pos.x - boid.pos.x)/d, (o.pos.y - boid.pos.y)/d);
+    const a = (typeof o._phase==='number'? o._phase : (o.hue||0)*Math.PI/180);
+    g.add(u.mult(Math.sin(a - boid._phase)));
+  }
+}
+if (g.mag()>0) {
+  const glide = g.normalize().mult(boid.maxSpeed*0.25);
+  steer.add(Vector.sub(glide, boid.vel).limit(boid.maxForce*0.4));
+}
+
+// ---- Visuals ----
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x=boid.pos.x, y=boid.pos.y; const ringA = (0.08 + R*0.18).toFixed(3);
+  api.addDrawable((ctx)=>{
+    // Aurora halo (phase-colored)
+    const r0=10, r1=26+R*10;
+    const gg=ctx.createRadialGradient(x,y, r0, x,y, r1);
+    gg.addColorStop(0, 'hsla(' + hue + ',100%,60%,' + (0.22+R*0.18).toFixed(3) + ')');
+    gg.addColorStop(1, 'hsla(' + hue + ',100%,60%,0.00)');
+    ctx.fillStyle=gg; ctx.beginPath(); ctx.arc(x,y,r1,0,Math.PI*2); ctx.fill();
+    // Perception ring (thin)
+    ctx.beginPath(); ctx.arc(x,y, Math.max(14, Rp*0.5), 0, Math.PI*2);
+    ctx.strokeStyle = 'hsla(' + hue + ',100%,70%,' + ringA + ')'; ctx.lineWidth=1; ctx.stroke();
+  });
+  // Occasional in-phase links (glow)
+  if (Math.random()<0.06 && n>0) {
+    // pick close, in-phase neighbor
+    let pick=null, pd=1e9; for(const o of neighbors){ const d=Vector.dist(boid.pos,o.pos); if(d>8 && d<Rp){ const a=(typeof o._phase==='number'?o._phase:(o.hue||0)*Math.PI/180); if (Math.cos(a - boid._phase)>0.8 && d<pd){ pd=d; pick=o; } } }
+    if (pick) {
+      const x1=x,y1=y,x2=pick.pos.x,y2=pick.pos.y; const hue2=(hue+pick.hue)/2;
+      api.addDrawable((ctx)=>{ ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.strokeStyle='hsla(' + hue2 + ',100%,70%,0.20)'; ctx.lineWidth=1.5; ctx.stroke(); ctx.restore(); });
+    }
+  }
+}
+// Trails intensified by coherence
+if (typeof api !== 'undefined' && api && api.depositTrail) {
+  api.depositTrail(boid.pos.x, boid.pos.y, Math.min(1.6, 0.4 + R*0.9));
+}
+
+return steer.limit(boid.maxForce);` },
+
           // ——— Interaction‑Driven (Clicks/Drags) ———
           { id: 'click-gravity-well-strong', name: 'Click — Gravity Well (Strong)', code: `/**
   Gravity Well (Strong)
