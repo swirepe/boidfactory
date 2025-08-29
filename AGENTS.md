@@ -70,3 +70,4 @@
  - Codex CLI Agent — signed on 2025-08-28, added maximized split view with rule pickers and uniqueness constraint.
  - Codex CLI Agent — signed on 2025-08-28, added split toggle icon (maximized): switches tabs (single) ↔ dropdowns (two editors).
  - Codex CLI Agent — signed on 2025-08-28, added core rules to preset selector and reformatted all presets with JSDoc-style docs.
+ - Codex CLI Agent — signed on 2025-08-29, added 30 documented rule presets (nature, AI/ML/CS, physics/math) to boidlabv1.2.html and logged prompts.

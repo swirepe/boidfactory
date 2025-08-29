@@ -1181,6 +1181,402 @@ const tang = new Vector(-toM.y, toM.x).normalize();
 const radial = (d - targetDist) / targetDist;
 const desired = tang.mult(boid.maxSpeed * 0.7).add(toM.normalize().mult(boid.maxSpeed * 0.3 * (-radial)));
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          // ——— Nature-Inspired (10) ———
+          { id: 'nature-ants-trail', name: 'Nature — Ants Trail Following', code: `/**
+  Ants Trail Following
+  Favor neighbors ahead within a forward cone to emulate pheromone trails.
+  Steps:
+    1) Compute forward unit vector f from boid velocity.
+    2) For neighbors within angle cone (~60°), average their velocities.
+    3) Steer to match that average (like following a trail laid ahead).
+  @returns {Vector}
+*/
+const f = boid.vel.clone().normalize();
+const cosTheta = Math.cos(Math.PI / 3); // 60° cone
+let sum = new Vector(); let n = 0;
+for (const o of neighbors) {
+  const dir = Vector.sub(o.pos, boid.pos).normalize();
+  const ahead = (f.x * dir.x + f.y * dir.y) > cosTheta;
+  if (ahead) { sum.add(o.vel); n++; }
+}
+if (!n) return new Vector();
+const desired = sum.div(n).normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'nature-predator-shadow', name: 'Nature — Predator Shadowing', code: `/**
+  Predator Shadowing
+  Treat the fastest neighbor as a potential predator and slip laterally out of its line of approach.
+  Idea: move perpendicular to predator->boid vector (evasion without stopping).
+  @returns {Vector}
+*/
+let pred = null; let maxSp = -1;
+for (const o of neighbors) { const sp = o.vel.mag(); if (sp > maxSp) { maxSp = sp; pred = o; } }
+if (!pred) return new Vector();
+const toMe = Vector.sub(boid.pos, pred.pos); if (toMe.mag() === 0) return new Vector();
+const lateral = new Vector(-toMe.y, toMe.x).normalize();
+const desired = lateral.mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.9);` },
+
+          { id: 'nature-butterfly-chase', name: 'Nature — Butterfly Mate Chase', code: `/**
+  Butterfly Mate Chase
+  Chase nearest similar-hue neighbor with a gentle sinusoidal lateral weave.
+  @returns {Vector}
+*/
+let tgt = null; let minD = Infinity;
+for (const o of neighbors) {
+  const hueDiff = Math.abs(((boid.hue - o.hue + 540) % 360) - 180);
+  const d = Vector.dist(boid.pos, o.pos);
+  if (hueDiff < 35 && d < minD) { minD = d; tgt = o; }
+}
+if (!tgt) return new Vector();
+const dir = Vector.sub(tgt.pos, boid.pos);
+const base = dir.clone().normalize();
+const t = performance.now() * 0.003;
+const weave = new Vector(-base.y, base.x).mult(0.4 * Math.sin(t));
+const desired = base.add(weave).normalize().mult(boid.maxSpeed * 0.9);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'nature-river-current', name: 'Nature — River Current Drift', code: `/**
+  River Current Drift
+  Add a position-dependent current (fast midstream, slow near banks) to mimic rivers.
+  Field: v_c = (a * sin(π y / H), 0), peaking at screen center.
+  @returns {Vector}
+*/
+const a = 0.6 * boid.maxSpeed;
+const H = gameState.height || 1;
+const current = new Vector(a * Math.sin(Math.PI * boid.pos.y / H), 0);
+const desired = boid.vel.clone().add(current).normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.5);` },
+
+          { id: 'nature-thermal-soar', name: 'Nature — Thermal Soaring', code: `/**
+  Thermal Soaring
+  Birds circle and climb in periodic updraft cells; emulate tangential drift around thermal centers.
+  @returns {Vector}
+*/
+const scale = 220;
+const cx = Math.round(boid.pos.x / scale) * scale + scale * 0.5;
+const cy = Math.round(boid.pos.y / scale) * scale + scale * 0.5;
+const toC = new Vector(cx - boid.pos.x, cy - boid.pos.y);
+if (toC.mag() === 0) return new Vector();
+const tang = new Vector(-toC.y, toC.x).normalize();
+const radial = toC.clone().normalize().mult(0.3);
+const desired = tang.mult(boid.maxSpeed * 0.8).add(radial.mult(boid.maxSpeed * 0.2));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'nature-wolf-encircle', name: 'Nature — Pack Encircle (Mouse)', code: `/**
+  Pack Encircle (Mouse)
+  When mouse is down (as prey), take up ring positions and orbit to encircle.
+  Angle target derived from hue for variety.
+  @returns {Vector}
+*/
+if (!mouse.down) return new Vector();
+const mp = new Vector(mouse.pos.x, mouse.pos.y);
+const toM = Vector.sub(mp, boid.pos);
+const baseAng = ((boid.hue % 360) / 360) * 2 * Math.PI;
+const targetR = 140;
+const posOnRing = new Vector(Math.cos(baseAng), Math.sin(baseAng)).mult(targetR);
+const targetPt = mp.clone().add(posOnRing);
+const desired = Vector.sub(targetPt, boid.pos).normalize().mult(boid.maxSpeed * 0.9);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'nature-murmuration-accel', name: 'Nature — Murmuration (Accel Coupling)', code: `/**
+  Murmuration (Acceleration Coupling)
+  React to neighbors' instantaneous accelerations to transmit waves through the flock.
+  @returns {Vector}
+*/
+let sumA = new Vector(); let nA = 0;
+for (const o of neighbors) { if (o !== boid) { sumA.add(o.acc); nA++; } }
+if (!nA) return new Vector();
+const desired = sumA.div(nA).limit(boid.maxForce * 2);
+return desired;` },
+
+          { id: 'nature-salmon-upstream', name: 'Nature — Salmon Upstream', code: `/**
+  Salmon Upstream
+  Swim against a vertically varying flow (opposing a sinusoidal downstream).
+  @returns {Vector}
+*/
+const flowDown = Math.sin(boid.pos.y / 40) * 0.7 * boid.maxSpeed;
+const oppose = new Vector(-flowDown, -0.1 * boid.maxSpeed);
+const desired = boid.vel.clone().add(oppose).normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.6);` },
+
+          { id: 'nature-edge-perch', name: 'Nature — Edge Perching Tendency', code: `/**
+  Edge Perching Tendency
+  Mild attraction toward horizontal bands as if preferring perches/thermals at certain altitudes.
+  @returns {Vector}
+*/
+const bands = [0.25, 0.5, 0.75];
+let bestY = null; let bestScore = Infinity;
+for (const b of bands) {
+  const y = b * (gameState.height || 1);
+  const dy = Math.abs(y - boid.pos.y); if (dy < bestScore) { bestScore = dy; bestY = y; }
+}
+if (bestY == null) return new Vector();
+const desired = new Vector(0, bestY - boid.pos.y).limit(boid.maxForce * 2);
+return desired;` },
+
+          { id: 'nature-herd-leader', name: 'Nature — Herd Leader Bias', code: `/**
+  Herd Leader Bias
+  Favor following the single nearest neighbor (leader) more than the crowd.
+  @returns {Vector}
+*/
+let leader = null; let dmin = Infinity;
+for (const o of neighbors) { const d = Vector.dist(boid.pos, o.pos); if (d > 0 && d < dmin) { dmin = d; leader = o; } }
+if (!leader) return new Vector();
+const desired = leader.vel.clone().normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          // ——— CS / ML / AI-Inspired (10) ———
+          { id: 'ai-gradient-descent-density', name: 'AI — Gradient Descent on Density', code: `/**
+  Gradient Descent on Density
+  Minimize crowding by descending the local density gradient (move toward open space).
+  Implementation: sum normalized offsets from neighbors (an estimator of ∇density),
+  then step opposite that sum with a small learning rate.
+  @returns {Vector}
+*/
+let g = new Vector();
+for (const o of neighbors) { g.add(Vector.sub(boid.pos, o.pos).normalize()); }
+if (g.mag() === 0) return new Vector();
+const lr = 0.8; // learning rate
+const desired = g.normalize().mult(boid.maxSpeed * lr);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'ai-simulated-annealing', name: 'AI — Simulated Annealing Drift', code: `/**
+  Simulated Annealing Drift
+  Add exploratory noise that cools over time to escape local minima, then settle.
+  @returns {Vector}
+*/
+const T0 = 1.0, halfLifeMs = 12000; // initial temp and cooling rate
+const t = performance.now();
+const T = T0 * Math.pow(0.5, t / halfLifeMs);
+const rnd = Vector.random2D().mult(boid.maxSpeed * 0.5 * T);
+return Vector.sub(rnd, new Vector()).limit(boid.maxForce * 0.6);` },
+
+          { id: 'ai-pid-speed', name: 'AI — PID Speed Controller', code: `/**
+  PID Speed Controller
+  Keep speed near a target using a simple proportional term (I/D omitted for stability without memory).
+  @returns {Vector}
+*/
+const v = boid.vel.mag();
+const target = boid.maxSpeed * 0.75;
+const err = target - v;
+const kp = 0.6;
+const desired = boid.vel.clone().normalize().mult(v + kp * err);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.6);` },
+
+          { id: 'ai-robust-median-heading', name: 'AI — Robust Median Heading', code: `/**
+  Robust Median Heading
+  Compute a circular median of neighbor headings (robust to outliers) and align to it.
+  @returns {Vector}
+*/
+const angs = [];
+for (const o of neighbors) { if (o !== boid) angs.push(Math.atan2(o.vel.y, o.vel.x)); }
+if (!angs.length) return new Vector();
+angs.sort((a,b) => a-b);
+const med = angs[Math.floor(angs.length/2)];
+const dir = new Vector(Math.cos(med), Math.sin(med));
+const desired = dir.mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'ai-reward-shaping', name: 'AI — Reward Shaping (Mouse Attraction)', code: `/**
+  Reward Shaping (Mouse Attraction)
+  Encourage moving toward the mouse (reward) while avoiding high density (penalty).
+  @returns {Vector}
+*/
+const toMouse = new Vector(mouse.pos.x - boid.pos.x, mouse.pos.y - boid.pos.y);
+let density = 0; for (const o of neighbors) if (Vector.dist(boid.pos, o.pos) < config.perceptionRadius * 0.7) density++;
+const reward = toMouse.normalize().mult(boid.maxSpeed * 0.6);
+const penalty = new Vector(); if (density > 0) penalty.add(boid.vel.clone().mult(-0.2 * Math.min(1, density / 8)));
+const desired = reward.add(penalty).normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'ai-entropy-seeking', name: 'AI — Entropy-Seeking Heading', code: `/**
+  Entropy-Seeking Heading
+  Avoid dominant local heading by nudging perpendicular to the majority, increasing directional diversity.
+  @returns {Vector}
+*/
+let v = new Vector(); let n = 0; for (const o of neighbors) { v.add(o.vel); n++; }
+if (!n) return new Vector();
+const mean = v.div(n);
+const perp = new Vector(-mean.y, mean.x).normalize();
+const desired = perp.mult(boid.maxSpeed * 0.7);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.8);` },
+
+          { id: 'ai-hash-goal-explore', name: 'AI — Hash-Cell Exploration', code: `/**
+  Hash-Cell Exploration
+  Map space to a grid and use a simple hash to pick a persistent pseudo-random heading per cell.
+  @returns {Vector}
+*/
+const cell = 120; const cx = Math.floor(boid.pos.x / cell), cy = Math.floor(boid.pos.y / cell);
+let h = (cx * 73856093) ^ (cy * 19349663);
+h ^= (h << 13); h ^= (h >> 17); h ^= (h << 5);
+const ang = ((h >>> 0) % 6283) / 1000 - Math.PI; // [-π, π)
+const dir = new Vector(Math.cos(ang), Math.sin(ang));
+const desired = dir.mult(boid.maxSpeed * 0.9);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.8);` },
+
+          { id: 'ai-laplacian-smoothing', name: 'AI — Laplacian Velocity Smoothing', code: `/**
+  Laplacian Velocity Smoothing
+  Steer toward the distance-weighted average neighbor velocity (graph Laplacian intuition).
+  @returns {Vector}
+*/
+let sumV = new Vector(); let sumW = 0;
+for (const o of neighbors) { const d = Math.max(1, Vector.dist(boid.pos, o.pos)); const w = 1 / (d*d); sumV.add(o.vel.clone().mult(w)); sumW += w; }
+if (sumW === 0) return new Vector();
+const avg = sumV.div(sumW).normalize().mult(boid.maxSpeed);
+return Vector.sub(avg, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'ai-attention-k', name: 'AI — Attention to k Nearest', code: `/**
+  Attention to k Nearest
+  Focus on the k nearest neighbors with inverse-distance weights (attention-like).
+  @returns {Vector}
+*/
+const k = 5; const arr = neighbors.slice().map(o => ({ o, d: Vector.dist(boid.pos, o.pos) })).filter(x => x.d > 0);
+arr.sort((a,b)=>a.d-b.d);
+let acc = new Vector(); let wsum = 0; for (let i=0;i<Math.min(k,arr.length);i++){ const w=1/arr[i].d; acc.add(arr[i].o.vel.clone().mult(w)); wsum+=w; }
+if (!wsum) return new Vector();
+const desired = acc.div(wsum).normalize().mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'ai-decision-tree', name: 'AI — Decision Tree (Stateful Guard)', code: `/**
+  Decision Tree (Stateful Guard)
+  If local density > threshold, prioritize separation-like open-space seeking; else use cohesion-like pull.
+  @returns {Vector}
+*/
+let close = 0; for (const o of neighbors) if (Vector.dist(boid.pos, o.pos) < config.perceptionRadius * 0.6) close++;
+if (close > 6) {
+  // open space
+  let g = new Vector(); for (const o of neighbors) g.add(Vector.sub(boid.pos, o.pos).normalize());
+  if (g.mag()===0) return new Vector();
+  return g.normalize().mult(boid.maxSpeed).sub(boid.vel).limit(boid.maxForce);
+} else {
+  // cohesion
+  let c = new Vector(); let n=0; for (const o of neighbors){ c.add(o.pos); n++; }
+  if (!n) return new Vector(); c.div(n);
+  return Vector.sub(c.sub(boid.pos).normalize().mult(boid.maxSpeed), boid.vel).limit(boid.maxForce);
+}` },
+
+          // ——— Physics / Math-Inspired (10) ———
+          { id: 'phys-lennard-jones', name: 'Physics — Lennard-Jones Potential', code: `/**
+  Lennard-Jones Potential
+  Models short-range repulsion and longer-range attraction: F(r) ~ 24ε[(2(σ/r)^13) - (σ/r)^7].
+  Implementation uses a smoothed approximation to avoid singularities.
+  @returns {Vector}
+*/
+const sigma = Math.max(8, config.boidSize);
+const epsilon = 0.3;
+let F = new Vector();
+for (const o of neighbors) {
+  const rVec = Vector.sub(o.pos, boid.pos); let r = rVec.mag(); if (r < 1) r = 1;
+  const sr = sigma / r; const sr6 = Math.pow(sr,6); const sr12 = sr6*sr6;
+  const mag = 24*epsilon*((2*sr12) - sr6) / r; // derivative scaled
+  F.add(rVec.normalize().mult(mag));
+}
+return F.limit(boid.maxForce);` },
+
+          { id: 'phys-coulomb-hue', name: 'Physics — Coulomb by Hue', code: `/**
+  Coulomb by Hue
+  Assign pseudo-charge from hue: similar hues attract, dissimilar repel (cosine in hue circle).
+  F ~ k q_i q_j / r^2 along the line.
+  @returns {Vector}
+*/
+let force = new Vector();
+for (const o of neighbors) {
+  const dh = Math.abs(((boid.hue - o.hue + 540) % 360) - 180);
+  const qi = Math.cos((boid.hue/180)*Math.PI), qj = Math.cos((o.hue/180)*Math.PI);
+  const q = Math.cos(dh/180*Math.PI) * qi * qj;
+  let rVec = Vector.sub(o.pos, boid.pos); let r = rVec.mag(); if (r < 4) r = 4;
+  const mag = (q) / (r*r);
+  force.add(rVec.normalize().mult(mag));
+}
+return force.limit(boid.maxForce);` },
+
+          { id: 'phys-harmonic-center', name: 'Physics — Harmonic to Center', code: `/**
+  Harmonic to Center
+  Spring toward screen center with mild damping: F = -k(x - x_c).
+  @returns {Vector}
+*/
+const cx = (gameState.width||0)/2, cy = (gameState.height||0)/2;
+const k = 0.0025;
+const toC = new Vector(cx - boid.pos.x, cy - boid.pos.y);
+return toC.mult(k * boid.maxSpeed * 50).limit(boid.maxForce);` },
+
+          { id: 'phys-gyroscopic', name: 'Physics — Gyroscopic Precession', code: `/**
+  Gyroscopic Precession
+  Accelerate perpendicular to current acceleration to create smooth arcs.
+  @returns {Vector}
+*/
+const a = boid.acc.clone(); if (a.mag() === 0) return new Vector();
+const perp = new Vector(-a.y, a.x).normalize().mult(boid.maxSpeed*0.6);
+return Vector.sub(perp, boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'phys-rotating-field', name: 'Physics — Rotating Vector Field', code: `/**
+  Rotating Vector Field
+  A simple divergence-free field: v = (sin(y/L), -sin(x/L)) producing curls.
+  @returns {Vector}
+*/
+const L = 90;
+const field = new Vector(Math.sin(boid.pos.y / L), -Math.sin(boid.pos.x / L)).mult(boid.maxSpeed*0.8);
+return Vector.sub(field, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'math-lissajous', name: 'Math — Lissajous Driver', code: `/**
+  Lissajous Driver
+  Target a parametric Lissajous heading: x = sin(a t), y = sin(b t + δ) applied as desired direction.
+  @returns {Vector}
+*/
+const t = performance.now() * 0.002;
+const a = 1.0, b = 1.7, d = Math.PI/3;
+const dir = new Vector(Math.sin(a*t), Math.sin(b*t + d)).normalize();
+const desired = dir.mult(boid.maxSpeed);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.7);` },
+
+          { id: 'phys-brownian', name: 'Physics — Brownian Jitter', code: `/**
+  Brownian Jitter
+  Add small unbiased random impulses to simulate thermal noise.
+  @returns {Vector}
+*/
+return Vector.random2D().mult(boid.maxForce * 0.5);` },
+
+          { id: 'math-scalar-potential', name: 'Math — Scalar Potential Flow', code: `/**
+  Scalar Potential Flow
+  Move along negative gradient of φ(x,y) = sin(x/L) cos(y/L) to follow potential valleys.
+  @returns {Vector}
+*/
+const L = 120;
+const dphidx = Math.cos(boid.pos.x / L) * Math.cos(boid.pos.y / L) / L;
+const dphidy = -Math.sin(boid.pos.x / L) * Math.sin(boid.pos.y / L) / L;
+const grad = new Vector(dphidx, dphidy);
+const desired = grad.mult(-1).normalize().mult(boid.maxSpeed*0.8);
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'math-golden-spiral-center', name: 'Math — Golden Spiral to Center', code: `/**
+  Golden Spiral to Center
+  Steer along a logarithmic spiral toward the screen center with golden ratio turn.
+  @returns {Vector}
+*/
+const cx = (gameState.width||0)/2, cy = (gameState.height||0)/2;
+const toC = new Vector(cx - boid.pos.x, cy - boid.pos.y);
+if (toC.mag() === 0) return new Vector();
+const phi = (1 + Math.sqrt(5)) / 2; // golden ratio
+const tang = new Vector(-toC.y, toC.x).normalize();
+const desired = toC.normalize().mult(boid.maxSpeed*0.5).add(tang.mult(boid.maxSpeed*0.5/phi));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'math-fibonacci-spacing', name: 'Math — Fibonacci Spacing', code: `/**
+  Fibonacci Spacing
+  Encourage nearest-neighbor distance toward τ·size (τ ≈ golden ratio), repelling if closer and attracting if farther.
+  @returns {Vector}
+*/
+let near = null; let dmin = Infinity;
+for (const o of neighbors) { const d = Vector.dist(boid.pos, o.pos); if (d>0 && d<dmin) { dmin=d; near=o; } }
+if (!near || !isFinite(dmin)) return new Vector();
+const tau = (1 + Math.sqrt(5)) / 2;
+const rest = Math.max(8, boid.size * tau);
+const dir = Vector.sub(near.pos, boid.pos);
+const sign = dmin > rest ? 1 : -1;
+const desired = dir.normalize().mult(sign * boid.maxSpeed * Math.min(1, Math.abs(dmin-rest)/rest));
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         ];
 
         // --- INITIALIZATION ---
