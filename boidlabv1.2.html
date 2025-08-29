@@ -241,8 +241,12 @@
         #code-pane.maximized .dock-btn[data-action="toggle-split"] { display: inline-flex; }
         /* Split pickers inside the tabs row */
         .split-picker { display: none; }
-        #code-pane.maximized.split-on .code-tabs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+        #code-pane.maximized.split-on .code-tabs { display: flex; align-items: center; gap: 8px; padding: 0 6px; }
         #code-pane.maximized.split-on .split-picker { display: block; }
+        #code-pane.maximized.split-on .dock-controls { margin-left: auto; }
+        .rule-actions { display: inline-flex; gap: 6px; }
+        .rule-btn { background: transparent; border: none; color: rgba(255,255,255,0.8); width: 28px; height: 28px; display: inline-flex; align-items: center; justify-content: center; cursor: pointer; opacity: 0.8; }
+        .rule-btn:hover { opacity: 1; color: var(--primary-color); }
         .split-picker select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; }
         .split-picker.split-left { justify-self: start; }
         .split-picker.split-right { justify-self: end; }
@@ -348,6 +352,12 @@
         </button>
         <div class="code-tabs">
             <span class="split-picker split-left"><select id="split-left"></select></span>
+            <span class="split-picker split-right"><select id="split-right"></select></span>
+            <span class="rule-actions" aria-label="Rule actions">
+                <button class="rule-btn" id="rule-new-btn" title="New rule" aria-label="New rule">＋</button>
+                <button class="rule-btn" id="rule-rename-btn" title="Rename rule" aria-label="Rename rule">✎</button>
+                <button class="rule-btn" id="rule-delete-btn" title="Delete rule" aria-label="Delete rule">🗑</button>
+            </span>
             <button class="tab-button active" data-tab="cohesion">Cohesion</button>
             <button class="tab-button" data-tab="separation">Separation</button>
             <button class="tab-button" data-tab="alignment">Alignment</button>
@@ -382,7 +392,7 @@
                     </svg>
                 </button>
             </span>
-            <span class="split-picker split-right"><select id="split-right"></select></span>
+            
         </div>
         <div class="split-view" id="split-view">
             <div class="split-pane" data-slot="left"></div>
@@ -1431,6 +1441,170 @@ return mouseForce;`
             });
             // Reflect initial split toggle state when first applied to maximized
             updateSplitModeUI();
+
+            // Rule actions
+            document.getElementById('rule-new-btn').addEventListener('click', () => {
+                const name = prompt('New rule name (letters, numbers, _-):', 'custom');
+                if (!name) return;
+                addRule(name);
+            });
+            document.getElementById('rule-rename-btn').addEventListener('click', () => {
+                const current = getCurrentRuleTarget();
+                if (!current) return;
+                const newName = prompt(`Rename rule '${current}' to:`, current);
+                if (!newName || newName === current) return;
+                renameRule(current, newName);
+            });
+            document.getElementById('rule-delete-btn').addEventListener('click', () => {
+                const target = getCurrentRuleTarget();
+                if (!target) return;
+                if (userFunctions.length <= 1) { alert('At least one rule is required.'); return; }
+                if (!confirm(`Delete rule '${target}'? This cannot be undone.`)) return;
+                deleteRule(target);
+            });
+        }
+
+        function sanitizeRuleName(name) {
+            let s = String(name).trim();
+            s = s.replace(/\s+/g, '-').replace(/[^A-Za-z0-9_-]/g, '').toLowerCase();
+            if (!s) s = 'rule';
+            let base = s, i = 2;
+            while (userFunctions.find(u => u.name === s)) { s = base + '-' + i++; }
+            return s;
+        }
+
+        function defaultRuleTemplate(name) {
+            return `/**\n * ${name}: custom rule template\n * @param {Boid} boid\n * @param {GameState} gameState\n * @param {Boid[]} neighbors\n * @param {Config} config\n * @param {Mouse} mouse\n * @param {typeof Vector} Vector\n * @returns {Vector}\n */\nconst steering = new Vector(0, 0);\n// Example: mild drift toward mouse when down\nif (mouse.down) {\n  const desired = Vector.sub(new Vector(mouse.pos.x, mouse.pos.y), boid.pos).normalize().mult(boid.maxSpeed * 0.2);\n  return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.2);\n}\nreturn steering;`;
+        }
+
+        function addRule(nameRaw) {
+            const name = sanitizeRuleName(nameRaw);
+            if (userFunctions.find(u => u.name === name)) { alert('Rule already exists.'); return; }
+            // Create tab and content
+            const tabsBar = document.querySelector('.code-tabs');
+            const tabBtn = document.createElement('button');
+            tabBtn.className = 'tab-button'; tabBtn.dataset.tab = name; tabBtn.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+            tabsBar.insertBefore(tabBtn, tabsBar.querySelector('.dock-controls'));
+            const content = document.createElement('div'); content.id = name; content.className = 'tab-content';
+            const ta = document.createElement('textarea'); content.appendChild(ta);
+            document.getElementById('code-pane').appendChild(content);
+            // Editor
+            const ed = CodeMirror.fromTextArea(ta, { mode:'javascript', theme:'dracula', lineNumbers:true, lint:true, gutters:["CodeMirror-lint-markers"], extraKeys:{'Ctrl-Space':'autocomplete'}, hintOptions:{hint: editor => ruleHint(editor), completeSingle:false} });
+            editors[name] = ed;
+            // Compile function
+            const fnObj = { name, weight: 1.0, updateBoid: null };
+            userFunctions.push(fnObj);
+            // Hook tab behavior
+            tabBtn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-button').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                tabBtn.classList.add('active'); content.classList.add('active'); ed.refresh();
+            });
+            // Set default code and compile
+            ed.setValue(defaultRuleTemplate(name));
+            const updateFunction = debounce((editor) => {
+                const tabButton = tabBtn;
+                try {
+                    const code = editor.getValue();
+                    const params = ['boid','gameState','neighbors','config','mouse','Vector'];
+                    const dynamicFunc = new Function(...params, code);
+                    // dry-run
+                    const mockBoid = new Boid(0,0); const mockState = { boids:[mockBoid], quadtree:null, width:10, height:10 };
+                    let ok = true; try { const res = dynamicFunc(mockBoid, mockState, [], config, mouse, Vector); if (res && !(res instanceof Vector)) ok = false; } catch(e){ ok=false; }
+                    if (!ok) throw new Error('Rule dry-run failed');
+                    fnObj.updateBoid = (boid, gameState, neighbors) => { try { const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector); return out instanceof Vector ? out : new Vector(); } catch (e) { fnObj._fallbackUntil = performance.now()+2000; updateRuleStatusUI(); return new Vector(); } };
+                    tabButton.classList.add('reloaded-success'); setTimeout(()=>tabButton.classList.remove('reloaded-success'),600);
+                } catch (e) {
+                    console.error(`Error reloading rule '${name}':`, e);
+                    fnObj.updateBoid = () => new Vector();
+                    tabButton.classList.add('reloaded-error'); setTimeout(()=>tabButton.classList.remove('reloaded-error'),600);
+                    fnObj._fallbackUntil = performance.now()+2000; updateRuleStatusUI();
+                }
+            }, 500);
+            ed.on('change', updateFunction);
+            ed.on('inputRead', (cm, change) => { if (!change.text) return; const ch = change.text.join(''); if (/^[\w\.$]$/.test(ch)) cm.showHint({ hint: ruleHint, completeSingle:false });});
+            updateFunction(ed);
+            // Rebuild config UI and split pickers
+            config[`${name}Weight`] = 1.0;
+            setupConfigUI();
+            if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
+        }
+
+        function getCurrentRuleTarget() {
+            const pane = document.getElementById('code-pane');
+            const maximized = pane.classList.contains('maximized');
+            if (maximized && config.splitEnabled) {
+                // Default to left selection
+                const leftSel = document.getElementById('split-left');
+                return leftSel && leftSel.value || null;
+            }
+            const active = document.querySelector('.tab-button.active');
+            return active ? active.dataset.tab : null;
+        }
+
+        function renameRule(oldNameRaw, newNameRaw) {
+            const oldName = oldNameRaw; const newName = sanitizeRuleName(newNameRaw);
+            if (!editors[oldName]) { alert('Rule not found.'); return; }
+            if (editors[newName]) { alert('A rule with that name already exists.'); return; }
+            // Update userFunctions entry
+            const fnObj = userFunctions.find(u => u.name === oldName);
+            if (!fnObj) return;
+            fnObj.name = newName;
+            // Move editor mapping
+            editors[newName] = editors[oldName]; delete editors[oldName];
+            // Update tab button and content IDs
+            const tabBtn = document.querySelector(`.tab-button[data-tab="${oldName}"]`);
+            const content = document.getElementById(oldName);
+            if (tabBtn) { tabBtn.dataset.tab = newName; tabBtn.textContent = newName.charAt(0).toUpperCase()+newName.slice(1); }
+            if (content) { content.id = newName; }
+            // Update config weight key
+            const oldKey = `${oldName}Weight`; const newKey = `${newName}Weight`;
+            config[newKey] = (oldKey in config) ? config[oldKey] : 1.0; delete config[oldKey];
+            setupConfigUI();
+            // Update split selections
+            const leftSel = document.getElementById('split-left');
+            const rightSel = document.getElementById('split-right');
+            if (leftSel && leftSel.value === oldName) leftSel.value = newName;
+            if (rightSel && rightSel.value === oldName) rightSel.value = newName;
+            if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
+        }
+
+        function deleteRule(name) {
+            if (!editors[name]) return;
+            // Remove from userFunctions
+            const idx = userFunctions.findIndex(u => u.name === name);
+            if (idx >= 0) userFunctions.splice(idx,1);
+            // Remove editor DOM
+            const wrapper = editors[name].getWrapperElement();
+            if (wrapper && wrapper.parentNode) wrapper.parentNode.removeChild(wrapper);
+            delete editors[name];
+            // Remove tab and content
+            const tabBtn = document.querySelector(`.tab-button[data-tab="${name}"]`);
+            const content = document.getElementById(name);
+            if (tabBtn && tabBtn.parentNode) tabBtn.parentNode.removeChild(tabBtn);
+            if (content && content.parentNode) content.parentNode.removeChild(content);
+            // Update active tab
+            const firstTab = document.querySelector('.tab-button');
+            const firstContentId = firstTab ? firstTab.dataset.tab : null;
+            if (firstTab) firstTab.classList.add('active');
+            if (firstContentId) {
+                const firstContent = document.getElementById(firstContentId);
+                if (firstContent) firstContent.classList.add('active');
+            }
+            // Remove weight config and rebuild UI
+            delete config[`${name}Weight`];
+            setupConfigUI();
+            // Update split
+            const leftSel = document.getElementById('split-left');
+            const rightSel = document.getElementById('split-right');
+            if (leftSel && leftSel.value === name) {
+                const other = userFunctions[0] && userFunctions[0].name; if (other) leftSel.value = other;
+            }
+            if (rightSel && rightSel.value === name) {
+                const other = userFunctions.find(u => u.name !== (leftSel && leftSel.value)) || userFunctions[0];
+                if (other) rightSel.value = other.name;
+            }
+            if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
         }
         
         // --- SIMULATION LOGIC ---
