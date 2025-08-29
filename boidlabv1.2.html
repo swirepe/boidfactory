@@ -228,8 +228,7 @@
             display: block;
         }
         /* Maximized split controls and panes */
-        .split-controls { display: none; }
-        #code-pane.maximized.split-on .split-controls { display: flex; align-items: center; gap: 8px; padding: 6px; border-bottom: 1px solid rgba(255,255,255,0.1); }
+        .split-controls { display: none !important; }
         .split-controls label { font-family: var(--font-mono); font-size: 12px; color: #ddd; }
         .split-controls select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; }
         .split-view { display: none; }
@@ -240,6 +239,13 @@
         /* Show split toggle icon only in maximized mode */
         .dock-btn[data-action="toggle-split"] { display: none; }
         #code-pane.maximized .dock-btn[data-action="toggle-split"] { display: inline-flex; }
+        /* Split pickers inside the tabs row */
+        .split-picker { display: none; }
+        #code-pane.maximized.split-on .code-tabs { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; }
+        #code-pane.maximized.split-on .split-picker { display: block; }
+        .split-picker select { background: #333; color: #fff; border: 1px solid #555; padding: 4px 6px; border-radius: 4px; font-family: var(--font-mono); font-size: 12px; }
+        .split-picker.split-left { justify-self: start; }
+        .split-picker.split-right { justify-self: end; }
         /* Editor sizing by dock mode */
         .CodeMirror { border: none; }
         #code-pane.dock-bottom.visible .CodeMirror { height: calc(40vh - 92px) !important; }
@@ -341,6 +347,7 @@
             <span class="code-label">Code</span>
         </button>
         <div class="code-tabs">
+            <span class="split-picker split-left"><select id="split-left"></select></span>
             <button class="tab-button active" data-tab="cohesion">Cohesion</button>
             <button class="tab-button" data-tab="separation">Separation</button>
             <button class="tab-button" data-tab="alignment">Alignment</button>
@@ -375,12 +382,7 @@
                     </svg>
                 </button>
             </span>
-        </div>
-        <div class="split-controls" id="split-controls">
-            <label for="split-left">Left</label>
-            <select id="split-left"></select>
-            <label for="split-right">Right</label>
-            <select id="split-right"></select>
+            <span class="split-picker split-right"><select id="split-right"></select></span>
         </div>
         <div class="split-view" id="split-view">
             <div class="split-pane" data-slot="left"></div>
@@ -1400,8 +1402,10 @@ return mouseForce;`
                 if (mounted[R] !== 'right') mountRule(R, 'right');
             }
             function showSplitUI(show) {
-                document.getElementById('split-controls').style.display = show ? 'flex' : 'none';
-                document.getElementById('split-view').style.display = show ? 'flex' : 'none';
+                const sc = document.getElementById('split-controls');
+                const sv = document.getElementById('split-view');
+                if (sc) sc.style.display = 'none'; // managed in tabs row now
+                if (sv) sv.style.display = show ? 'flex' : 'none';
             }
             // Expose hooks for dock mode changes
             setupCodePane._split = {
