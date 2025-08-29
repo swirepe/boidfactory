@@ -2142,6 +2142,133 @@ const mp = new Vector(mouse.pos.x, mouse.pos.y);
 const toM = Vector.sub(mp, boid.pos); const d = Math.max(1, toM.mag());
 const desired = toM.normalize().mult(boid.maxSpeed * Math.min(2.4, 240 / d));
 return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
+
+          // --- Flashy drawable-focused presets (occasional visuals only) ---
+          { id: 'spark-burst', name: 'Flash — Spark Burst', code: `/**
+  Spark Burst (Flashy)
+  Occasionally emits a radial burst of spark lines around the boid.
+  Visual-only (rare): ~3% chance per frame per boid.
+  @returns {Vector}
+*/
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.03) {
+  const x = boid.pos.x, y = boid.pos.y;
+  const spokes = 8 + Math.floor(Math.random() * 8);
+  const len = 10 + Math.random() * 24;
+  const hue = (boid.hue + Math.floor(Math.random() * 30)) % 360;
+  api.addDrawable((ctx) => {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    for (let i = 0; i < spokes; i++) {
+      const a = (i / spokes) * Math.PI * 2 + Math.random() * 0.2;
+      ctx.beginPath();
+      ctx.moveTo(x, y);
+      ctx.lineTo(x + Math.cos(a) * len, y + Math.sin(a) * len);
+      ctx.strokeStyle = 'hsla(' + hue + ', 100%, 70%, 0.22)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
+}
+return new Vector();` },
+
+          { id: 'glow-orb', name: 'Flash — Glow Orb', code: `/**
+  Glow Orb (Flashy)
+  Occasionally draws a soft glowing orb around the boid.
+  Visual-only (rare): ~5% chance per frame per boid.
+  @returns {Vector}
+*/
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.05) {
+  const x = boid.pos.x, y = boid.pos.y;
+  const r = 10 + Math.random() * 18;
+  const hue = boid.hue;
+  api.addDrawable((ctx) => {
+    const g = ctx.createRadialGradient(x, y, 0.1 * r, x, y, r);
+    g.addColorStop(0, 'hsla(' + hue + ', 100%, 65%, 0.30)');
+    g.addColorStop(1, 'hsla(' + hue + ', 100%, 65%, 0.00)');
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fillStyle = g;
+    ctx.fill();
+  });
+}
+return new Vector();` },
+
+          { id: 'comet-flares', name: 'Flash — Comet Flares', code: `/**
+  Comet Flares (Flashy)
+  Fast boids occasionally produce a long, bright streak.
+  Visual-only (speed-gated, rare): chance scales with speed.
+  @returns {Vector}
+*/
+const speed = boid.vel.mag();
+const chance = Math.min(0.08, speed / (boid.maxSpeed * 12)); // small chance
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < chance) {
+  const dir = boid.vel.clone().normalize();
+  const x = boid.pos.x, y = boid.pos.y;
+  const L = 40 + Math.random() * 50;
+  const hue = (boid.hue + 10) % 360;
+  api.addDrawable((ctx) => {
+    ctx.save();
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.beginPath();
+    ctx.moveTo(x - dir.x * L * 0.8, y - dir.y * L * 0.8);
+    ctx.lineTo(x + dir.x * L * 0.1, y + dir.y * L * 0.1);
+    ctx.strokeStyle = 'hsla(' + hue + ', 100%, 70%, 0.22)';
+    ctx.lineWidth = 2.0;
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+return new Vector();` },
+
+          { id: 'shockwave-rings', name: 'Flash — Shockwave Rings', code: `/**
+  Shockwave Rings (Flashy)
+  Occasionally draws concentric rings around the boid.
+  Visual-only (rare): ~4% chance per frame per boid.
+  @returns {Vector}
+*/
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.04) {
+  const x = boid.pos.x, y = boid.pos.y;
+  const base = 8 + Math.random() * 10;
+  const hue = (config.hue + 40) % 360;
+  api.addDrawable((ctx) => {
+    ctx.save();
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(x, y, base + i * 6, 0, Math.PI * 2);
+      ctx.strokeStyle = 'hsla(' + hue + ', 100%, 70%, ' + (0.18 - i * 0.04) + ')';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    }
+    ctx.restore();
+  });
+}
+return new Vector();` },
+
+          { id: 'twinkle-trails', name: 'Flash — Twinkle Trails', code: `/**
+  Twinkle Trails (Flashy)
+  Occasionally draws small star twinkles near the boid.
+  Visual-only (rare): ~6% chance per frame per boid.
+  @returns {Vector}
+*/
+if (typeof api !== 'undefined' && api && api.addDrawable && Math.random() < 0.06) {
+  const x = boid.pos.x + (Math.random() - 0.5) * 10;
+  const y = boid.pos.y + (Math.random() - 0.5) * 10;
+  const s = 4 + Math.random() * 3;
+  const hue = (boid.hue + 300) % 360;
+  api.addDrawable((ctx) => {
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(Math.random() * Math.PI);
+    ctx.beginPath();
+    ctx.moveTo(-s, 0); ctx.lineTo(0, -s); ctx.lineTo(s, 0); ctx.lineTo(0, s); ctx.closePath();
+    ctx.strokeStyle = 'hsla(' + hue + ', 100%, 70%, 0.22)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+    ctx.restore();
+  });
+}
+return new Vector();` },
         ];
 
         // --- INITIALIZATION ---
@@ -2163,6 +2290,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                 // Preset controls — persisted via URL
                 presetIncludeCore: true,
                 presetCount: 4,
+                presetTheme: 'any',
                 ...urlParams
             };
             logConfig('Initial config:', config);
@@ -2184,7 +2312,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                     } else if (typeof urlParams.presetCount === 'number') {
                         n = Math.max(1, Math.min(rulePresets.length, urlParams.presetCount));
                     }
-                    resetRulesWithPresets(n, !!config.presetIncludeCore);
+                    resetRulesWithPresets(n, !!config.presetIncludeCore, config.presetTheme || 'any');
                 }
             }
             applyDockMode(config.codePaneDock);
@@ -2489,6 +2617,16 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                         <input type="number" id="preset-count" min="1" max="${Math.max(4, rulePresets.length)}" value="${(config.presetCount ?? 4)}"
                             style="width:72px;background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
                     </label>
+                    <label>Theme
+                        <select id="preset-theme" style="background:#333;color:#fff;border:1px solid #555;border-radius:4px;padding:4px 6px;">
+                            <option value="any">Any (random)</option>
+                            <option value="flash">Flash Pack</option>
+                            <option value="mouse">Mouse</option>
+                            <option value="click">Click</option>
+                            <option value="drag">Drag</option>
+                            <option value="templates">Templates</option>
+                        </select>
+                    </label>
                     <label><input type="checkbox" id="preset-include-core" ${config.presetIncludeCore ? 'checked' : ''}> Include core rules</label>
                     <button id="preset-reset-btn" style="background: var(--primary-color); color: #fff; border: none; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-family: var(--font-mono);">Reset with Presets</button>
                 </div>
@@ -2498,12 +2636,14 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
             presetBtn.addEventListener('click', () => {
                 const countEl = presetsBox.querySelector('#preset-count');
                 const includeCoreEl = presetsBox.querySelector('#preset-include-core');
+                const themeEl = presetsBox.querySelector('#preset-theme');
                 const n = Math.max(1, Math.min(rulePresets.length, parseInt(countEl.value || '1', 10)));
                 const includeCore = !!includeCoreEl.checked;
+                const themeKey = (themeEl && themeEl.value) || 'any';
                 // Mirror Count into URL immediately on reset click
                 config.presetCount = n;
                 if (config.debug) updateAllURLParams(); else updateURL('presetCount', config.presetCount);
-                resetRulesWithPresets(n, includeCore);
+                resetRulesWithPresets(n, includeCore, themeKey);
             });
             // Persist "Include core rules" toggle in URL
             const includeCoreEl = presetsBox.querySelector('#preset-include-core');
@@ -2523,6 +2663,15 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                     const n = Math.max(1, Math.min(rulePresets.length, isNaN(val) ? 4 : val));
                     config.presetCount = n;
                     if (config.debug) updateAllURLParams(); else updateURL('presetCount', config.presetCount);
+                });
+            }
+            // Set and persist theme to URL
+            const themeEl = presetsBox.querySelector('#preset-theme');
+            if (themeEl) {
+                themeEl.value = (config.presetTheme || 'any');
+                themeEl.addEventListener('change', e => {
+                    config.presetTheme = e.target.value || 'any';
+                    if (config.debug) updateAllURLParams(); else updateURL('presetTheme', config.presetTheme);
                 });
             }
             
@@ -2618,12 +2767,13 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
                     <li><code>splitLeftRule</code>, <code>splitRightRule</code>: rule IDs</li>
                     <li><code>presetIncludeCore</code>: boolean — include core rules in batch</li>
                     <li><code>presetCount</code>: number — default count for batch presets</li>
+                    <li><code>presetTheme</code>: string — one of <code>any</code>, <code>flash</code>, <code>mouse</code>, <code>click</code>, <code>drag</code>, <code>templates</code></li>
                     <li><code>randomPresets</code>: boolean|number — when true/number, loads random presets on start; number picks that many</li>
                 </ul>
                 <h4>Examples</h4>
                 <ul>
-                    <li><code>${urlBase}?presetIncludeCore=false&amp;randomPresets=true</code></li>
-                    <li><code>${urlBase}?presetIncludeCore=true&amp;presetCount=6&amp;randomPresets=6</code></li>
+                    <li><code>${urlBase}?presetIncludeCore=false&amp;presetTheme=flash&amp;randomPresets=true</code></li>
+                    <li><code>${urlBase}?presetIncludeCore=true&amp;presetCount=6&amp;presetTheme=mouse&amp;randomPresets=6</code></li>
                     <li><code>${urlBase}?debug=true&amp;hue=320&amp;boidCount=300</code></li>
                 </ul>
                 <h3>Change Log</h3>
@@ -3148,16 +3298,28 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 3.0);` },
             if (ed) ed.setValue(preset.code);
         }
 
-        function resetRulesWithPresets(n, includeCore) {
+        function resetRulesWithPresets(n, includeCore, themeKey = 'any') {
             const coreIds = new Set(['cohesion-core','alignment-core','separation-core','novel-core']);
             const corePresets = rulePresets.filter(p => coreIds.has(p.id));
             const nonCorePresets = rulePresets.filter(p => !coreIds.has(p.id));
+            // Themed filters
+            const presetThemes = {
+                any: (p) => true,
+                flash: (p) => p.name && p.name.startsWith('Flash — '),
+                mouse: (p) => /mouse|click/i.test(p.id) || /mouse|click/i.test(p.name || ''),
+                drag:  (p) => /drag/i.test(p.id) || /drag/i.test(p.name || ''),
+                click: (p) => /click/i.test(p.id) || /click/i.test(p.name || ''),
+                templates: (p) => /^template-/.test(p.id)
+            };
+            const filterFn = presetThemes[themeKey] || presetThemes.any;
+            const themed = nonCorePresets.filter(filterFn);
             // Shuffle helper
             const shuffle = (arr) => { const a = arr.slice(); for (let i=a.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [a[i],a[j]]=[a[j],a[i]]; } return a; };
             // Build final selection: [core (optional)] + N random non-core
             const selected = [];
             if (includeCore) selected.push(...corePresets);
-            const picks = shuffle(nonCorePresets).slice(0, Math.max(0, Math.min(n, nonCorePresets.length)));
+            const pool = themed.length ? themed : nonCorePresets;
+            const picks = shuffle(pool).slice(0, Math.max(0, Math.min(n, pool.length)));
             selected.push(...picks);
             if (selected.length === 0) return;
             // Replace current rules with selected list (first replaces first rule; others added; rest deleted)

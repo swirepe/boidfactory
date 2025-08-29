@@ -74,3 +74,5 @@
  - Codex CLI Agent — signed on 2025-08-29, persisted "Include core rules" to URL and added random presets URL param.
  - Codex CLI Agent — signed on 2025-08-29, added `presetCount` URL param and documented all URL params in Help overlay.
  - Codex CLI Agent — signed on 2025-08-29, added Drawables/Frame graph to Stats overlay and wired it to per-frame drawables.
+ - Codex CLI Agent — signed on 2025-08-29, added 5 flashy drawable presets (spark burst, glow orb, comet flares, shockwave rings, twinkle trails) with occasional visuals.
+ - Codex CLI Agent — signed on 2025-08-29, added themed batch selection (Any, Flash, Mouse, Click, Drag, Templates) with URL param `presetTheme`.
