@@ -85,3 +85,4 @@
  - Codex CLI Agent — signed on 2025-08-29, added 5 AI/ML/CS presets with rich visuals: Transformer Self-Attention, K-Means Centroids, Gaussian Mixture Attraction, Swarm Dijkstra Heuristic, Epsilon-Greedy Explorer.
  - Codex CLI Agent — signed on 2025-08-29, added 10 more AI/ML/CS presets with rich visuals, and reorganized preset categories to surface AI/ML/CS after Core.
  - Codex CLI Agent — signed on 2025-08-29, added AI/ML Pack bundle (presetBundle=ai-ml-pack) and fixed flow-pack id.
+ - Codex CLI Agent — signed on 2025-08-29, added 10 more AI/ML/CS presets (Hopfield, t‑SNE, Cellular Automaton, GAN Edge, RBF SVM, Nearest‑Triangulation, Ant Colony, Belief Propagation, Consistent Hash Ring, RRT Explorer) and sorted presets alphabetically within groups.

@@ -1116,6 +1116,165 @@ if (boid.pos.y > gameState.height - margin) steer.y -= (boid.pos.y - (gameState.
 if (steer.mag() > 0) steer.normalize().mult(boid.maxSpeed * 0.8).sub(boid.vel).limit(boid.maxForce * 0.8);
 return steer;` },
 
+          { id: 'ai-hopfield-attractor', name: 'AI — Hopfield Memory Attractor', code: `/**
+  Hopfield Memory Attractor (Stylized)
+  A few memory patterns (points) act as attractors; boids descend an energy-like field.
+  Visuals: Soft glowing wells at memory points; vector toward nearest well.
+  @returns {Vector}
+*/
+const memories = [
+  new Vector(gameState.width*0.25, gameState.height*0.25),
+  new Vector(gameState.width*0.75, gameState.height*0.3),
+  new Vector(gameState.width*0.5, gameState.height*0.7)
+];
+let best = null, bestE = Infinity;
+for (const m of memories) { const d=Vector.dist(boid.pos,m); const E=d*d; if (E<bestE){ bestE=E; best=m; } }
+if (!best) return new Vector();
+const desired = Vector.sub(best, boid.pos).normalize().mult(boid.maxSpeed*0.85);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{
+  for (const m of memories){ const g=ctx.createRadialGradient(m.x,m.y,4,m.x,m.y,40); g.addColorStop(0,'hsla(' + (((config.hue+60)%360)) + ',100%,65%,0.28)'); g.addColorStop(1,'hsla(' + (((config.hue+60)%360)) + ',100%,65%,0)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(m.x,m.y,40,0,Math.PI*2); ctx.fill(); }
+  ctx.beginPath(); ctx.moveTo(boid.pos.x,boid.pos.y); ctx.lineTo(best.x,best.y); ctx.strokeStyle='hsla(' + (boid.hue) + ',100%,70%,0.18)'; ctx.lineWidth=1; ctx.stroke();
+}); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'ml-tsne-local-structure', name: 'ML — t‑SNE Local Structure', code: `/**
+  t‑SNE Local Structure (Inspired)
+  Preserve local neighborhoods by attracting very close neighbors and repelling mid‑distance ones.
+  Visuals: Curved connection hints to nearest neighbors with fading opacity.
+  @returns {Vector}
+*/
+const R = config.perceptionRadius; const near = R*0.35; const mid = R*0.8;
+let F = new Vector();
+const pairs = [];
+for (const o of neighbors){ const d=Vector.dist(boid.pos,o.pos); if (d>0 && d<R){ pairs.push({o,d}); } }
+pairs.sort((a,b)=>a.d-b.d);
+const k = Math.min(6, pairs.length);
+for (let i=0;i<k;i++){
+  const {o,d} = pairs[i];
+  if (d<near){ // attract strongly
+    F.add(Vector.sub(o.pos, boid.pos).normalize().mult(1.0*(near-d)/near));
+  } else if (d<mid){ // repel softly
+    F.add(Vector.sub(boid.pos, o.pos).normalize().mult(0.5*(mid-d)/mid));
+  }
+}
+const desired = F.normalize().mult(boid.maxSpeed*0.85);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; const top=pairs.slice(0,4); api.addDrawable((ctx)=>{
+  for (const {o,d} of top){ ctx.beginPath(); ctx.moveTo(x,y); const mx=(x+o.pos.x)/2, my=(y+o.pos.y)/2; ctx.quadraticCurveTo(mx+(Math.random()-0.5)*8, my+(Math.random()-0.5)*8, o.pos.x, o.pos.y); ctx.strokeStyle='hsla(' + (((config.hue+100)%360)) + ',100%,70%,' + (0.28*(1-Math.min(1,d/R))).toFixed(3) + ')'; ctx.lineWidth=1; ctx.stroke(); }
+}); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'cs-cellular-automaton-field', name: 'CS — Cellular Automaton Field', code: `/**
+  Cellular Automaton Field (Conway‑like Influence)
+  A coarse grid evolves; alive cells attract, dead repel slightly.
+  Visuals: Grid cells with alive state highlighted beneath boids.
+  @returns {Vector}
+*/
+const cell=24; const cols=Math.ceil(gameState.width/cell), rows=Math.ceil(gameState.height/cell);
+if (!gameState._ca){ gameState._ca=new Uint8Array(cols*rows); for(let i=0;i<cols*rows;i++){ gameState._ca[i]=Math.random()<0.15?1:0; } gameState._caNext=new Uint8Array(cols*rows); gameState._caT=0; }
+// Step CA occasionally
+if ((performance.now()-gameState._caT)>600){ const N=(i,j)=>{ let s=0; for(let dy=-1;dy<=1;dy++) for(let dx=-1;dx<=1;dx++){ if(dx||dy){ const x=(i+dx+cols)%cols,y=(j+dy+rows)%rows; s+=gameState._ca[y*cols+x]; } } return s; }; for(let j=0;j<rows;j++){ for(let i=0;i<cols;i++){ const n=N(i,j), idx=j*cols+i; const a=gameState._ca[idx]; gameState._caNext[idx]= (a? (n===2||n===3): (n===3)) ? 1:0; } } gameState._ca.set(gameState._caNext); gameState._caT=performance.now(); }
+const ci=Math.floor(boid.pos.x/cell), rj=Math.floor(boid.pos.y/cell); const alive=gameState._ca[(rj%rows)*cols+(ci%cols)]===1;
+const dir = alive ? Vector.sub(new Vector(ci*cell+cell/2, rj*cell+cell/2), boid.pos).normalize() : Vector.sub(boid.pos, new Vector(ci*cell+cell/2, rj*cell+cell/2)).normalize();
+const desired=dir.mult(boid.maxSpeed*0.6);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.fillStyle='hsla(' + (((config.hue+260)%360)) + ',100%,60%,0.06)'; for(let j=0;j<rows;j++){ for(let i=0;i<cols;i++){ if (gameState._ca[j*cols+i]) ctx.fillRect(i*cell,j*cell,cell,cell); } } }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.7);` },
+
+          { id: 'ai-gan-discriminator-edge', name: 'AI — GAN Discriminator Edge', code: `/**
+  GAN Discriminator Edge (Stylized)
+  Two modes ("real" and "fake"); steer toward real mode and away from fake potential.
+  Visuals: Ring contours for both modes; edge lines show gradient direction.
+  @returns {Vector}
+*/
+const real=new Vector(gameState.width*0.3, gameState.height*0.6);
+const fake=new Vector(gameState.width*0.7, gameState.height*0.4);
+function grad(c, s, toward=true){ const d=Vector.sub(c, boid.pos); const r2=Math.max(1,d.x*d.x+d.y*d.y); const g=d.mult( Math.exp(-r2/(2*s*s)) / (s*s) ); return toward? g : g.mult(-1); }
+let g = grad(real, 110, true).add(grad(fake, 130, false));
+const desired=g.normalize().mult(boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ const centers=[[real,110,'+40'],[fake,130,'+300']]; for(const [c,s,shift] of centers){ for(let i=1;i<=3;i++){ ctx.beginPath(); ctx.arc(c.x,c.y,(s/3)*i,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+Number(shift))%360)) + ',100%,70%,' + (0.14 - i*0.03) + ')'; ctx.lineWidth=1; ctx.stroke(); } } }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'ml-rbf-svm-field', name: 'ML — RBF SVM Field', code: `/**
+  RBF SVM Field (Toy)
+  Two class centers define an RBF potential; steer along sign of decision function.
+  Visuals: Concentric potential contours; direction arrow.
+  @returns {Vector}
+*/
+const A=new Vector(gameState.width*0.3, gameState.height*0.3), B=new Vector(gameState.width*0.7, gameState.height*0.7);
+const gamma=1/(140*140);
+function phi(c){ const dx=boid.pos.x-c.x, dy=boid.pos.y-c.y; return Math.exp(-(dx*dx+dy*dy)*gamma); }
+const f = phi(A) - phi(B);
+const grad = new Vector((B.x-A.x)*gamma*f, (B.y-A.y)*gamma*f).normalize();
+const desired = grad.mult(boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ for(const c of [A,B]){ for(let i=1;i<=3;i++){ ctx.beginPath(); ctx.arc(c.x,c.y,i*40,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+180)%360)) + ',100%,70%,' + (0.12 - i*0.02) + ')'; ctx.lineWidth=1; ctx.stroke(); } } }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'cs-nearest-triangulation', name: 'CS — Nearest‑Triangulation Glide', code: `/**
+  Nearest‑Triangulation Glide
+  Build a local triangle from nearest two neighbors; glide toward triangle centroid.
+  Visuals: Wireframe triangle to the nearest two neighbors.
+  @returns {Vector}
+*/
+const arr=[]; for(const o of neighbors){ const d=Vector.dist(boid.pos,o.pos); if(d>0) arr.push({o,d}); }
+arr.sort((a,b)=>a.d-b.d); if (arr.length<2) return new Vector();
+const a=arr[0].o.pos, b=arr[1].o.pos; const c=boid.pos; const centroid=new Vector((a.x+b.x+c.x)/3,(a.y+b.y+c.y)/3);
+const desired=Vector.sub(centroid,c).normalize().mult(boid.maxSpeed*0.8);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(c.x,c.y); ctx.lineTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.closePath(); ctx.strokeStyle='hsla(' + (((config.hue+220)%360)) + ',100%,70%,0.18)'; ctx.lineWidth=1; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
+
+          { id: 'ai-ant-colony-intensify', name: 'AI — Ant Colony Intensify', code: `/**
+  Ant Colony Intensify
+  Follow pheromone gradient; deposit more when moving faster (positive feedback).
+  Visuals: Glowing trails; bright vectors on steep gradients.
+  @returns {Vector}
+*/
+const s=6; const pR=(x,y)=>{ const col=Math.floor(Math.max(0,Math.min(pheromones.cols-1,x/pheromones.cell))); const row=Math.floor(Math.max(0,Math.min(pheromones.rows-1,y/pheromones.cell))); return pheromones.grid[row*pheromones.cols+col]||0; };
+const L=pR(boid.pos.x-s,boid.pos.y), Rv=pR(boid.pos.x+s,boid.pos.y), U=pR(boid.pos.x,boid.pos.y-s), D=pR(boid.pos.x,boid.pos.y+s);
+const grad=new Vector(Rv-L, D-U);
+let desired = grad.mag()>1e-6 ? grad.normalize().mult(boid.maxSpeed) : Vector.random2D().mult(boid.maxSpeed*0.4);
+if (typeof api!=='undefined'&&api&&api.depositTrail){ const amt=Math.min(2.0, 0.6 + boid.vel.mag()*0.2); api.depositTrail(boid.pos.x, boid.pos.y, amt); }
+if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+desired.x*12,y+desired.y*12); ctx.strokeStyle='hsla(' + (((config.hue+20)%360)) + ',100%,70%,0.28)'; ctx.lineWidth=1.5; ctx.stroke(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
+
+          { id: 'ml-belief-propagation', name: 'ML — Belief Propagation (Two Anchors)', code: `/**
+  Belief Propagation (Two Anchors)
+  Messages from two anchors combine into a belief gradient; steer accordingly.
+  Visuals: Arrows from anchors with opacity indicating influence.
+  @returns {Vector}
+*/
+const a1=new Vector(gameState.width*0.2, gameState.height*0.8);
+const a2=new Vector(gameState.width*0.8, gameState.height*0.2);
+function msg(c,s){ const d=Vector.sub(c,boid.pos); const r=Math.max(1,d.mag()); const w=Math.exp(-r*r/(2*s*s)); return d.normalize().mult(w); }
+const m1=msg(a1,160), m2=msg(a2,140);
+const belief=m1.add(m2).normalize();
+const desired=belief.mult(boid.maxSpeed*0.85);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ const arr=[[a1,m1.mag()],[a2,m2.mag()]]; for(const [c,w] of arr){ ctx.beginPath(); ctx.moveTo(c.x,c.y); const v=Vector.sub(boid.pos,c).normalize(); ctx.lineTo(c.x+v.x*24, c.y+v.y*24); ctx.strokeStyle='hsla(' + (((config.hue+80)%360)) + ',100%,70%,' + (0.1+0.3*w) + ')'; ctx.lineWidth=2; ctx.stroke(); } }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'cs-consistent-hash-ring', name: 'CS — Consistent Hash Ring', code: `/**
+  Consistent Hash Ring
+  Partition the plane into ring sectors; boids steer along their sector arc.
+  Visuals: A large ring with sector boundaries; arc indicator near the boid.
+  @returns {Vector}
+*/
+const center=new Vector(gameState.width/2, gameState.height/2);
+const ringR=Math.min(gameState.width,gameState.height)*0.35;
+const sectors=8; const angle=Math.atan2(boid.pos.y-center.y, boid.pos.x-center.x);
+const sector=Math.floor(((angle+Math.PI)/(2*Math.PI))*sectors)%sectors;
+const tang=new Vector(-(boid.pos.y-center.y), boid.pos.x-center.x).normalize();
+const desired=tang.mult(boid.maxSpeed*0.9);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(center.x,center.y,ringR,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+40)%360)) + ',100%,70%,0.18)'; ctx.lineWidth=1; ctx.stroke(); for(let i=0;i<sectors;i++){ const a=i*(2*Math.PI/sectors)-Math.PI; ctx.beginPath(); ctx.moveTo(center.x,center.y); ctx.lineTo(center.x+Math.cos(a)*ringR, center.y+Math.sin(a)*ringR); ctx.strokeStyle='hsla(' + (((config.hue+40)%360)) + ',100%,70%,0.08)'; ctx.stroke(); } }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.9);` },
+
+          { id: 'ai-rrt-explorer', name: 'AI — RRT Explorer', code: `/**
+  RRT Explorer (Stylized)
+  Sample a waypoint randomly; steer toward it; occasionally resample — resembling a rapidly-exploring random tree.
+  Visuals: Waypoint star and faint segment from last sample.
+  @returns {Vector}
+*/
+if (!boid._wp || Math.random()<0.02){ boid._prevWp=boid._wp || null; boid._wp=new Vector(Math.random()*gameState.width, Math.random()*gameState.height); }
+const target=boid._wp; const desired=Vector.sub(target,boid.pos).normalize().mult(boid.maxSpeed*0.9);
+if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ if (boid._prevWp){ ctx.beginPath(); ctx.moveTo(boid._prevWp.x,boid._prevWp.y); ctx.lineTo(target.x,target.y); ctx.strokeStyle='hsla(' + (((config.hue+300)%360)) + ',100%,70%,0.12)'; ctx.stroke(); } ctx.save(); ctx.translate(target.x,target.y); ctx.rotate(Math.PI/4); ctx.beginPath(); ctx.moveTo(-4,0); ctx.lineTo(0,-4); ctx.lineTo(4,0); ctx.lineTo(0,4); ctx.closePath(); ctx.strokeStyle='hsla(' + (((config.hue+300)%360)) + ',100%,70%,0.22)'; ctx.stroke(); ctx.restore(); }); }
+return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
           { id: 'orbital-centroid', name: 'Orbit Centroid', code: `/**
   Orbit Centroid
   Circle around neighbors' centroid (tangential flow)
@@ -3756,6 +3915,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 else if (/^Template\b|^Drawable Template\b/i.test(name)) groups['Templates'].push(p);
                 else groups['Other'].push(p);
             }
+            // Sort presets by name within each group for easier scanning
+            Object.keys(groups).forEach(g => groups[g].sort((a,b) => (a.name||'').localeCompare(b.name||'')));
             return groups;
         }
 
