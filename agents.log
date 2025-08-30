@@ -203,3 +203,5 @@ expand the help overlay to explain more about the editors and rules
 [2025-08-30 00:38] Core rule descriptions: added second-line one-liners so the Rules tab shows clear summaries for cohesion, separation, alignment, and novel (core).
 [2025-08-30 00:42] Fixed Rules tab descriptions showing 'Concept' for novel rules by skipping heading/underline lines in the parser.
 [2025-08-30 00:46] Moved 'Include core rules' from Rules tab to Settings → Random Presets; Rules tab Apply now uses config.presetIncludeCore.
+[2025-08-30 00:51] Styled buttons and inputs; documented JSDoc format and rule-writing tips in Info overlay; improved Rules tab search input styling.
+[2025-08-30 00:55] Refined button CSS to exclude .tab-button so editor tabs keep their original look.

@@ -366,6 +366,44 @@
             display: block;
         }
         #help-overlay code { background-color: #333; padding: 2px 5px; border-radius: 3px; }
+
+        /* Form + button styling (exclude editor tab buttons) */
+        button:not(.dock-btn):not(.close-button):not(.tab-button) {
+            background: linear-gradient(180deg, hsl(var(--hue), 100%, 55%), hsl(var(--hue), 100%, 47%));
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.18);
+            border-bottom-color: rgba(0,0,0,0.35);
+            border-radius: 6px;
+            padding: 6px 10px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            cursor: pointer;
+            box-shadow: 0 1px 0 rgba(0,0,0,0.35);
+            transition: transform 0.06s ease, filter 0.12s ease;
+        }
+        button:not(.dock-btn):not(.close-button):not(.tab-button):hover { filter: brightness(1.05); }
+        button:not(.dock-btn):not(.close-button):not(.tab-button):active { transform: translateY(1px); }
+        .bar-btn { background: rgba(255,255,255,0.06) !important; border-color: rgba(255,255,255,0.18) !important; color: #eee !important; }
+        .bar-btn:hover { color: #fff !important; }
+        .config-tab { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); }
+        .config-tab.active { background: rgba(255,255,255,0.12); }
+        
+        /* Text inputs/selects */
+        .form-input,
+        input[type="text"], input[type="number"], input[type="color"],
+        select {
+            background: #1e1e1e;
+            color: #fff;
+            border: 1px solid rgba(255,255,255,0.18);
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-family: var(--font-mono);
+            font-size: 12px;
+            outline: none;
+        }
+        .form-input:focus,
+        input[type="text"]:focus, input[type="number"]:focus, input[type="color"]:focus,
+        select:focus { border-color: var(--primary-color); box-shadow: 0 0 0 2px rgba(255,255,255,0.05); }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
@@ -4100,6 +4138,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 valueSpan.textContent = ` ${Number(value).toFixed(2)}`;
                 item.innerHTML = `<label for="${id}">${label}</label>`;
                 const input = document.createElement('input');
+                input.className = 'form-input';
                 input.type = 'range'; input.id = id; input.min = min; input.max = max; input.step = step; input.value = value;
                 input.addEventListener('input', e => {
                     const newValue = parseFloat(e.target.value);
@@ -4127,6 +4166,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 item.className = 'config-item';
                 item.innerHTML = `<label for="${id}">${label}</label>`;
                 const select = document.createElement('select');
+                select.className = 'form-input';
                 select.id = id;
                 options.forEach(opt => {
                     const option = document.createElement('option');
@@ -4161,6 +4201,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 item.className = 'config-item';
                 item.innerHTML = `<label for="${id}">${label}</label>`;
                 const input = document.createElement('input');
+                input.className = 'form-input';
                 input.type = 'text'; input.id = id; input.value = value || '';
                 if (placeholder) input.placeholder = placeholder;
                 input.addEventListener('input', e => {
@@ -4428,7 +4469,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             const rulesHeader = document.createElement('h3'); rulesHeader.textContent = 'Select Rules'; rulesWrap.appendChild(rulesHeader);
             // Search/filter input
             const searchRow = document.createElement('div'); searchRow.style.display='flex'; searchRow.style.gap='8px'; searchRow.style.marginBottom='6px';
-            searchRow.innerHTML = `<input id="rules-search" type="text" placeholder="Search rules…" style="flex:1;background:#222;color:#fff;border:1px solid #555;border-radius:4px;padding:6px 8px;font-family:var(--font-mono);font-size:12px;">`;
+            searchRow.innerHTML = `<input id="rules-search" class="form-input" type="text" placeholder="Search rules…" style="flex:1;">`;
             rulesWrap.appendChild(searchRow);
             const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px'; actions.style.alignItems='center'; actions.style.flexWrap='wrap';
             actions.innerHTML = `
@@ -4737,7 +4778,40 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
               '</ul>' +
 
               '<h3>Coordinates</h3>' +
-              '<p>Origin at top‑left; +x right, +y down. Boids wrap around edges.</p>';
+              '<p>Origin at top‑left; +x right, +y down. Boids wrap around edges.</p>' +
+
+              '<h3>Rule Docs & JSDoc</h3>' +
+              '<p>Rules use a JSDoc header to provide a title and description used throughout the UI.</p>' +
+              '<pre style="white-space:pre-wrap;font-size:12px;line-height:1.4">' +
+              '/**\n' +
+              '  Title of the Rule\n' +
+              '  One-line description of behavior (shown in Rules tab)\n' +
+              '  \n' +
+              '  Rule API\n' +
+              '  @function rule\n' +
+              '  @param {Boid} boid\n' +
+              '  @param {GameState} gameState\n' +
+              '  @param {Boid[]} neighbors\n' +
+              '  @param {Object} config\n' +
+              '  @param {Mouse} mouse\n' +
+              '  @param {typeof Vector} Vector\n' +
+              '  @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api\n' +
+              '  @returns {Vector}\n' +
+              '*/\n' +
+              '//function rule(boid, gameState, neighbors, config, mouse, Vector, api) {\n' +
+              '  // Note:  You are implementing only the body of this function.\n' +
+              '  //        The function signature is provided here for reference.\n' +
+              '  // Return a Vector steering force; keep pure (no side effects).\n' +
+              '  return new Vector();\n' +
+              '//}\n' +
+              '</pre>' +
+              '<ul>' +
+              '<li><b>'
+              '<li><b>Description rule</b>: the Rules tab shows the second meaningful JSDoc line. Use line 1 for the title, line 2 for a concise summary.</li>' +
+              '<li><b>Purity</b>: avoid mutating global state; compute a steering vector and return it.</li>' +
+              '<li><b>Visuals</b>: use <code>api.addDrawable()</code> for lightweight draws and <code>api.depositTrail()</code> for trails; keep per-frame work small.</li>' +
+              '<li><b>Performance</b>: prefer O(k) neighbor loops; avoid heavy work inside drawables; honor <code>visualDensity</code>.</li>' +
+              '</ul>';
             container.querySelector('.close-button').onclick = () => container.classList.remove('visible');
         }
 
