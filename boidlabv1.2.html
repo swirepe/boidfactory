@@ -1394,12 +1394,31 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
   Visuals: Wireframe triangle to the nearest two neighbors.
   @returns {Vector}
 */
-const arr=[]; for(const o of neighbors){ const d=Vector.dist(boid.pos,o.pos); if(d>0) arr.push({o,d}); }
-arr.sort((a,b)=>a.d-b.d); if (arr.length<2) return new Vector();
-const a=arr[0].o.pos, b=arr[1].o.pos; const c=boid.pos; const centroid=new Vector((a.x+b.x+c.x)/3,(a.y+b.y+c.y)/3);
-const desired=Vector.sub(centroid,c).normalize().mult(boid.maxSpeed*0.8);
-if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(c.x,c.y); ctx.lineTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.closePath(); ctx.strokeStyle='hsla(' + (((config.hue+220)%360)) + ',100%,70%,0.18)'; ctx.lineWidth=1; ctx.stroke(); }); }
-return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
+const arr = [];
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d > 0) arr.push({ o, d });
+}
+arr.sort((a, b) => a.d - b.d);
+if (arr.length < 2) return new Vector();
+
+const a = arr[0].o.pos, b = arr[1].o.pos;
+const c = boid.pos;
+const centroid = new Vector((a.x + b.x + c.x) / 3, (a.y + b.y + c.y) / 3);
+const desired = Vector.sub(centroid, c).normalize().mult(boid.maxSpeed * 0.8);
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  api.addDrawable((ctx) => {
+    ctx.beginPath();
+    ctx.moveTo(c.x, c.y);
+    ctx.lineTo(a.x, a.y);
+    ctx.lineTo(b.x, b.y);
+    ctx.closePath();
+    ctx.strokeStyle = 'hsla(' + (((config.hue + 220) % 360)) + ',100%,70%,0.18)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+  });
+}
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.8);` },
 
           { id: 'ai-ant-colony-intensify', name: 'AI — Ant Colony Intensify', code: `/**
   Ant Colony Intensify
@@ -1407,12 +1426,35 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
   Visuals: Glowing trails; bright vectors on steep gradients.
   @returns {Vector}
 */
-const s=6; const pR=(x,y)=>{ const col=Math.floor(Math.max(0,Math.min(pheromones.cols-1,x/pheromones.cell))); const row=Math.floor(Math.max(0,Math.min(pheromones.rows-1,y/pheromones.cell))); return pheromones.grid[row*pheromones.cols+col]||0; };
-const L=pR(boid.pos.x-s,boid.pos.y), Rv=pR(boid.pos.x+s,boid.pos.y), U=pR(boid.pos.x,boid.pos.y-s), D=pR(boid.pos.x,boid.pos.y+s);
-const grad=new Vector(Rv-L, D-U);
-let desired = grad.mag()>1e-6 ? grad.normalize().mult(boid.maxSpeed) : Vector.random2D().mult(boid.maxSpeed*0.4);
-if (typeof api!=='undefined'&&api&&api.depositTrail){ const amt=Math.min(2.0, 0.6 + boid.vel.mag()*0.2); api.depositTrail(boid.pos.x, boid.pos.y, amt); }
-if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+desired.x*12,y+desired.y*12); ctx.strokeStyle='hsla(' + (((config.hue+20)%360)) + ',100%,70%,0.28)'; ctx.lineWidth=1.5; ctx.stroke(); }); }
+const s = 6;
+const pR = (x, y) => {
+  const col = Math.floor(Math.max(0, Math.min(pheromones.cols - 1, x / pheromones.cell)));
+  const row = Math.floor(Math.max(0, Math.min(pheromones.rows - 1, y / pheromones.cell)));
+  return pheromones.grid[row * pheromones.cols + col] || 0;
+};
+const L = pR(boid.pos.x - s, boid.pos.y);
+const Rv = pR(boid.pos.x + s, boid.pos.y);
+const U = pR(boid.pos.x, boid.pos.y - s);
+const D = pR(boid.pos.x, boid.pos.y + s);
+const grad = new Vector(Rv - L, D - U);
+let desired = grad.mag() > 1e-6
+  ? grad.normalize().mult(boid.maxSpeed)
+  : Vector.random2D().mult(boid.maxSpeed * 0.4);
+if (typeof api !== 'undefined' && api && api.depositTrail) {
+  const amt = Math.min(2.0, 0.6 + boid.vel.mag() * 0.2);
+  api.depositTrail(boid.pos.x, boid.pos.y, amt);
+}
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  const x = boid.pos.x, y = boid.pos.y;
+  api.addDrawable((ctx) => {
+    ctx.beginPath();
+    ctx.moveTo(x, y);
+    ctx.lineTo(x + desired.x * 12, y + desired.y * 12);
+    ctx.strokeStyle = 'hsla(' + (((config.hue + 20) % 360)) + ',100%,70%,0.28)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+  });
+}
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
           { id: 'ml-belief-propagation', name: 'ML — Belief Propagation (Two Anchors)', code: `/**
@@ -3755,15 +3797,41 @@ return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.9);` },
   Visuals: Highlight hashed avoided cells.
   @returns {Vector}
 */
-const cell=pheromones.cell||16; const col=Math.floor(boid.pos.x/cell), row=Math.floor(boid.pos.y/cell);
-function h1(i,j){ return (i*73856093 ^ j*19349663) & 255; }
-function h2(i,j){ return (i*83492791 ^ j*2971215073) & 255; }
-function isSet(i,j){ return ((h1(i,j)&1) && (h2(i,j)&1)); }
-let avoid=new Vector();
-for (let dy=-1;dy<=1;dy++) for (let dx=-1;dx<=1;dx++){ const ci=col+dx, rj=row+dy; if (isSet(ci,rj)){ const cx=ci*cell+cell/2, cy=rj*cell+cell/2; const away=new Vector(boid.pos.x-cx, boid.pos.y-cy); const m=Math.max(1,away.mag()); avoid.add(away.div(m)); } }
-const desired = avoid.mag()>1e-6 ? avoid.normalize().mult(boid.maxSpeed*0.7) : new Vector();
-if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ ctx.fillStyle='hsla(' + (((config.hue+320)%360)) + ',100%,60%,0.06)'; for (let y=0;y<pheromones.rows;y++){ for (let x=0;x<pheromones.cols;x++){ if (isSet(x,y)) ctx.fillRect(x*cell,y*cell,cell,cell); } } }); }
-return Vector.sub(desired,boid.vel).limit(boid.maxForce*0.7);` },
+const cell = pheromones.cell || 16;
+const col = Math.floor(boid.pos.x / cell);
+const row = Math.floor(boid.pos.y / cell);
+
+function h1(i, j) { return (i * 73856093 ^ j * 19349663) & 255; }
+function h2(i, j) { return (i * 83492791 ^ j * 2971215073) & 255; }
+function isSet(i, j) { return ((h1(i, j) & 1) && (h2(i, j) & 1)); }
+
+let avoid = new Vector();
+for (let dy = -1; dy <= 1; dy++) {
+  for (let dx = -1; dx <= 1; dx++) {
+    const ci = col + dx, rj = row + dy;
+    if (isSet(ci, rj)) {
+      const cx = ci * cell + cell / 2;
+      const cy = rj * cell + cell / 2;
+      const away = new Vector(boid.pos.x - cx, boid.pos.y - cy);
+      const m = Math.max(1, away.mag());
+      avoid.add(away.div(m));
+    }
+  }
+}
+const desired = avoid.mag() > 1e-6
+  ? avoid.normalize().mult(boid.maxSpeed * 0.7)
+  : new Vector();
+if (typeof api !== 'undefined' && api && api.addDrawable) {
+  api.addDrawable((ctx) => {
+    ctx.fillStyle = 'hsla(' + (((config.hue + 320) % 360)) + ',100%,60%,0.06)';
+    for (let y = 0; y < pheromones.rows; y++) {
+      for (let x = 0; x < pheromones.cols; x++) {
+        if (isSet(x, y)) ctx.fillRect(x * cell, y * cell, cell, cell);
+      }
+    }
+  });
+}
+return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.7);` },
 
           { id: 'ml-svm-margin', name: 'ML — SVM Margin Maximizer', code: `/**
   SVM Margin Maximizer (Toy)
@@ -4830,6 +4898,90 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     const desc = document.createElement('div'); desc.className = 'rule-desc'; desc.textContent = descText; desc.style.color = '#bbb'; desc.style.fontSize='11px'; desc.style.marginLeft='22px'; desc.style.display = config.rulesShowDescriptions && descText ? '' : 'none';
                     desc.dataset.desc = (descText||'').toLowerCase();
                     item.appendChild(desc);
+
+                    // Inline Novel configuration: always show under Novel rules
+                    const isNovel = /^novel-/.test(p.id) || /^Novel\b/i.test(p.name||'');
+                    if (isNovel) {
+                        const cfg = document.createElement('div');
+                        cfg.className = 'rule-inline-config';
+                        cfg.style.marginLeft = '22px';
+                        cfg.style.display = 'flex';
+                        cfg.style.flexDirection = 'column';
+                        cfg.style.gap = '2px';
+
+                        // Small helper to add a slider line (label, range, live value)
+                        const mount = (key, labelText, min, max, step, val) => {
+                            const line = document.createElement('div');
+                            line.className = 'config-item';
+                            line.style.display = 'flex';
+                            line.style.alignItems = 'center';
+                            line.style.gap = '6px';
+                            // Label
+                            const lab = document.createElement('label');
+                            lab.setAttribute('for', key);
+                            lab.textContent = labelText;
+                            lab.style.fontSize = '11px';
+                            lab.style.minWidth = '150px';
+                            // Input
+                            const input = document.createElement('input');
+                            input.type = 'range';
+                            input.min = String(min);
+                            input.max = String(max);
+                            input.step = String(step);
+                            input.value = String(val);
+                            input.id = key;
+                            input.style.flex = '1';
+                            // Value span
+                            const vs = document.createElement('span');
+                            vs.textContent = ' ' + Number(val).toFixed(3);
+                            vs.style.fontSize = '11px';
+                            input.addEventListener('input', (e) => {
+                                const v = parseFloat(e.target.value);
+                                config[key] = v;
+                                vs.textContent = ' ' + v.toFixed(3);
+                                if (config.debug) updateAllURLParams();
+                            });
+                            input.addEventListener('change', (e) => {
+                                if (!config.debug) updateURL(key, parseFloat(e.target.value));
+                            });
+                            line.appendChild(lab);
+                            line.appendChild(input);
+                            line.appendChild(vs);
+                            cfg.appendChild(line);
+                        };
+
+                        // Per-rule config mounts
+                        if (p.id === 'novel-kuramoto-aurora') {
+                            const hdr = document.createElement('div'); hdr.textContent = 'Kuramoto Aurora'; hdr.style.color='#bbb'; hdr.style.fontSize='11px'; cfg.appendChild(hdr);
+                            mount('kuramotoK', 'K (Coupling)', 0, 0.2, 0.005, (typeof config.kuramotoK==='number'?config.kuramotoK:0.05));
+                            mount('kuramotoOmegaBase', 'ω Base', -0.1, 0.1, 0.001, (typeof config.kuramotoOmegaBase==='number'?config.kuramotoOmegaBase:0.02));
+                            mount('kuramotoOmegaJitter', 'ω Jitter', 0, 0.1, 0.001, (typeof config.kuramotoOmegaJitter==='number'?config.kuramotoOmegaJitter:0.01));
+                            const rand = document.createElement('button'); rand.className='bar-btn'; rand.textContent='Randomize ω'; rand.style.alignSelf='flex-start'; rand.addEventListener('click', () => {
+                                try {
+                                    const wBase = (typeof config.kuramotoOmegaBase === 'number') ? config.kuramotoOmegaBase : 0.02;
+                                    const wJit = (typeof config.kuramotoOmegaJitter === 'number') ? config.kuramotoOmegaJitter : 0.01;
+                                    (gameState.boids||[]).forEach(b => { b._omega = (wBase + (Math.random()-0.5)*wJit) * (Math.random()<0.5?-1:1); });
+                                } catch(e) { /* noop */ }
+                            });
+                            cfg.appendChild(rand);
+                        } else if (p.id === 'novel-reaction-diffusion') {
+                            const hdr = document.createElement('div'); hdr.textContent = 'Reaction–Diffusion'; hdr.style.color='#bbb'; hdr.style.fontSize='11px'; cfg.appendChild(hdr);
+                            if (typeof config.rdFeed!=='number') config.rdFeed=0.037;
+                            if (typeof config.rdKill!=='number') config.rdKill=0.06;
+                            if (typeof config.rdDiffusion!=='number') config.rdDiffusion=0.95;
+                            if (typeof config.rdDeposit!=='number') config.rdDeposit=0.55;
+                            mount('rdFeed','Feed (f)',0.0,0.1,0.001,config.rdFeed);
+                            mount('rdKill','Kill (k)',0.0,0.1,0.001,config.rdKill);
+                            mount('rdDiffusion','Diffusion',0.5,1.5,0.01,config.rdDiffusion);
+                            mount('rdDeposit','Deposit',0.0,1.0,0.01,config.rdDeposit);
+                        } else if (p.id === 'novel-predator-prey') {
+                            const hdr = document.createElement('div'); hdr.textContent = 'Predator–Prey'; hdr.style.color='#bbb'; hdr.style.fontSize='11px'; cfg.appendChild(hdr);
+                            mount('predatorFrac','Predator Fraction',0.0,0.5,0.01,(typeof config.predatorFrac==='number'?config.predatorFrac:0.15));
+                            mount('predatorBoost','Speed Boost',0.5,2.0,0.01,(typeof config.predatorBoost==='number'?config.predatorBoost:1.3));
+                            mount('preyPanic','Prey Panic',0.5,2.0,0.01,(typeof config.preyPanic==='number'?config.preyPanic:1.1));
+                        }
+                        item.appendChild(cfg);
+                    }
                     items.appendChild(item);
                 });
                 box.appendChild(items);
@@ -5031,14 +5183,14 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
               '<h3>Rule Function</h3>' +
               '<pre style="white-space:pre-wrap;font-size:12px;line-height:1.4">' +
-              'function rule(boid, gameState, neighbors, config, mouse, Vector, api) {\n' +
+              'function rule(boid, gameState, neighbors, config, mouse, Vector, api, pheromones) {\n' +
               '  // Return a Vector steering force.\n' +
               '  // Optionally draw visuals via api.addDrawable() or deposit trails via api.depositTrail().\n' +
               '  return new Vector(0,0);\n' +
               '}' +
               '</pre>' +
               '<ul>' +
-              '<li><b>In scope</b>: <code>boid</code>, <code>neighbors</code>, <code>gameState</code>, <code>config</code>, <code>mouse</code>, <code>Vector</code>, <code>api</code>.</li>' +
+              '<li><b>In scope</b>: <code>boid</code>, <code>neighbors</code>, <code>gameState</code>, <code>config</code>, <code>mouse</code>, <code>Vector</code>, <code>api</code>, <code>pheromones</code>.</li>' +
               '<li><b>Return</b>: Always a <code>Vector</code>; non‑Vector results are ignored.</li>' +
               '</ul>' +
 
@@ -5156,6 +5308,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     'mouse', 'mouse.pos.x', 'mouse.pos.y', 'mouse.down',
                     'Vector', 'Vector.sub', 'Vector.dist', 'Vector.random2D',
                     'api', 'api.depositTrail', 'api.addDrawable', 'api.spawnBoid', 'api.destroyBoid', 'api.shake',
+                    'pheromones', 'pheromones.grid', 'pheromones.cols', 'pheromones.rows', 'pheromones.cell',
                     'add()', 'sub()', 'mult()', 'div()', 'mag()', 'normalize()', 'limit()', 'heading()', 'clone()',
                     'return new Vector(0, 0)', 'const v = new Vector(0, 0)'
                 ];
@@ -5197,7 +5350,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     const tabButton = document.querySelector(`.tab-button[data-tab="${fn.name}"]`);
                     try {
                         const code = editor.getValue();
-                        const params = ['boid', 'gameState', 'neighbors', 'config', 'mouse', 'Vector', 'api'];
+                        const params = ['boid', 'gameState', 'neighbors', 'config', 'mouse', 'Vector', 'api', 'pheromones'];
                         const dynamicFunc = new Function(...params, code);
                         const prev = fn.updateBoid;
 
@@ -5207,7 +5360,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                         const mockNeighbors = [];
                         let ok = true;
                         try {
-                            const res = dynamicFunc(mockBoid, mockState, mockNeighbors, config, mouse, Vector, RuleAPI);
+                            const res = dynamicFunc(mockBoid, mockState, mockNeighbors, config, mouse, Vector, RuleAPI, pheromones);
                             // Must be Vector or falsy; non-Vector returns are tolerated as no-op
                             if (res && !(res instanceof Vector)) ok = false;
                         } catch (e) {
@@ -5218,7 +5371,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                         // Adopt the new function, wrapped with runtime safety
                         fn.updateBoid = (boid, gameState, neighbors) => {
                             try {
-                                const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector, RuleAPI);
+                                const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector, RuleAPI, pheromones);
                                 return out instanceof Vector ? out : new Vector();
                             } catch (e) {
                                 const now = performance.now();
@@ -5543,13 +5696,13 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 const tabButton = tabBtn;
                 try {
                     const code = editor.getValue();
-                    const params = ['boid','gameState','neighbors','config','mouse','Vector','api'];
+                    const params = ['boid','gameState','neighbors','config','mouse','Vector','api','pheromones'];
                     const dynamicFunc = new Function(...params, code);
                     // dry-run
                     const mockBoid = new Boid(0,0); const mockState = { boids:[mockBoid], quadtree:null, width:10, height:10 };
-                    let ok = true; try { const res = dynamicFunc(mockBoid, mockState, [], config, mouse, Vector, RuleAPI); if (res && !(res instanceof Vector)) ok = false; } catch(e){ ok=false; }
+                    let ok = true; try { const res = dynamicFunc(mockBoid, mockState, [], config, mouse, Vector, RuleAPI, pheromones); if (res && !(res instanceof Vector)) ok = false; } catch(e){console.log(e); ok=false; }
                     if (!ok) throw new Error('Rule dry-run failed');
-                    fnObj.updateBoid = (boid, gameState, neighbors) => { try { const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector, RuleAPI); return out instanceof Vector ? out : new Vector(); } catch (e) { fnObj._fallbackUntil = performance.now()+2000; updateRuleStatusUI(); return new Vector(); } };
+                    fnObj.updateBoid = (boid, gameState, neighbors) => { try { const out = dynamicFunc(boid, gameState, neighbors, config, mouse, Vector, RuleAPI, pheromones); return out instanceof Vector ? out : new Vector(); } catch (e) { fnObj._fallbackUntil = performance.now()+2000; updateRuleStatusUI(); return new Vector(); } };
                     tabButton.classList.add('reloaded-success'); setTimeout(()=>tabButton.classList.remove('reloaded-success'),600);
                 } catch (e) {
                     console.error(`Error reloading rule '${name}':`, e);

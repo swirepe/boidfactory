@@ -107,3 +107,5 @@
 - Codex CLI Agent — signed on 2025-08-30, expanded Help overlay with editors/rules docs and enriched Info overlay technical documentation in boidlabv1.2.html.
 - Codex CLI Agent — signed on 2025-08-30, extended Rule API (spawn/destroy/shake), documented Info overlay, and added Novel — Predator–Prey Genesis rule with birth/death mechanics.
  - Codex CLI Agent — signed on 2025-08-30, added Header/Subheader config fields with defaults and live updates.
+ - Codex CLI Agent — signed on 2025-08-30, always show Novel configuration under each rule in the Rules tab (boidlabv1.2.html).
+ - Codex CLI Agent — signed on 2025-08-30, exposed pheromones to rule scope, updated docs/autocomplete, and reformatted pheromone‑related presets for readability.
