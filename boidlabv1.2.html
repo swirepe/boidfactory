@@ -646,6 +646,21 @@
         const updateTimeHistory = [];
         const drawablesHistory = [];
         const angleHistory = [];
+        // Quadtree perf histories
+        const qtAvgNodesHistory = [];
+        let quadStats = {
+            // per-frame accumulators
+            nodeCount: 0,
+            leafCount: 0,
+            maxDepth: 0,
+            avgLeafFill: 0,
+            queryCount: 0,
+            nodesVisitedTotal: 0,
+            nodesVisitedAccum: 0,
+            nodesVisitedMax: 0,
+            intersectsChecks: 0,
+            pointTests: 0,
+        };
         const MAX_ANGLE_HISTORY = 750;
 
         const userFunctions = [];
@@ -770,16 +785,35 @@
                 return this.northeast.insert(boid) || this.northwest.insert(boid) || this.southeast.insert(boid) || this.southwest.insert(boid);
             }
 
-            query(range, found = []) {
+            query(range, found = [], __root = true) {
+                // Root-call accounting snapshot
+                let beforeVisited = 0, beforeInter = 0, beforePts = 0;
+                if (__root) {
+                    beforeVisited = quadStats.nodesVisitedTotal;
+                    beforeInter = quadStats.intersectsChecks;
+                    beforePts = quadStats.pointTests;
+                }
+
+                quadStats.intersectsChecks++;
                 if (!this.boundary.intersects(range)) return found;
+                quadStats.nodesVisitedTotal++;
                 for (let b of this.boids) {
+                    quadStats.pointTests++;
                     if (range.contains(b)) found.push(b);
                 }
                 if (this.divided) {
-                    this.northwest.query(range, found);
-                    this.northeast.query(range, found);
-                    this.southwest.query(range, found);
-                    this.southeast.query(range, found);
+                    this.northwest.query(range, found, false);
+                    this.northeast.query(range, found, false);
+                    this.southwest.query(range, found, false);
+                    this.southeast.query(range, found, false);
+                }
+                if (__root) {
+                    const dv = quadStats.nodesVisitedTotal - beforeVisited;
+                    // const di = quadStats.intersectsChecks - beforeInter; // available if needed later
+                    // const dp = quadStats.pointTests - beforePts;
+                    quadStats.nodesVisitedAccum += dv;
+                    if (dv > quadStats.nodesVisitedMax) quadStats.nodesVisitedMax = dv;
+                    quadStats.queryCount++;
                 }
                 return found;
             }
@@ -4648,6 +4682,12 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 <div><canvas id="update-time-chart" height="80"></canvas></div>
                 <p>Drawables/Frame: <span id="drawables-count">0</span></p>
                 <div><canvas id="drawables-chart" height="80"></canvas></div>
+                <h3>Quadtree</h3>
+                <p>Nodes: <span id="qt-nodes">0</span> (Leaves: <span id="qt-leaves">0</span>)</p>
+                <p>Max Depth: <span id="qt-depth">0</span> | Avg Leaf Fill: <span id="qt-avgfill">0.0</span></p>
+                <p>Queries/Frame: <span id="qt-queries">0</span> | Avg Nodes/Query: <span id="qt-avgnodes">0.0</span> (Max: <span id="qt-maxnodes">0</span>)</p>
+                <p>Checks: intersects <span id="qt-intersects">0</span>, points <span id="qt-pointtests">0</span></p>
+                <div><canvas id="qt-avgnodes-chart" height="80"></canvas></div>
                 <h3>Flock Coherence</h3>
                 <div class="chart-container"><canvas id="polar-spiral-chart"></canvas></div>
                 <h3>Mean Direction</h3>
@@ -4675,6 +4715,12 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             charts.drawablesChart = new Chart(document.getElementById('drawables-chart').getContext('2d'), {
                 type: 'line',
                 data: { labels: Array(50).fill(''), datasets: [{ label: 'Drawables / Frame', data: Array(50).fill(0), borderColor: `hsl(${(config.hue + 240) % 360}, 100%, 50%)`, borderWidth: 1, pointRadius: 0, tension: 0.4 }] },
+                options: { scales: { y: { beginAtZero: true } } }
+            });
+
+            charts.qtAvgNodesChart = new Chart(document.getElementById('qt-avgnodes-chart').getContext('2d'), {
+                type: 'line',
+                data: { labels: Array(50).fill(''), datasets: [{ label: 'Avg Nodes per Query', data: Array(50).fill(0), borderColor: `hsl(${(config.hue + 30) % 360}, 100%, 60%)`, borderWidth: 1, pointRadius: 0, tension: 0.4 }] },
                 options: { scales: { y: { beginAtZero: true } } }
             });
 
@@ -5606,7 +5652,25 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         function update() {
             const boundary = new Rectangle(gameState.width / 2, gameState.height / 2, gameState.width / 2, gameState.height / 2);
             gameState.quadtree = new QuadTree(boundary, 4);
+            // Reset quadtree stats per frame
+            quadStats.nodeCount = 0; quadStats.leafCount = 0; quadStats.maxDepth = 0; quadStats.avgLeafFill = 0;
+            quadStats.queryCount = 0; quadStats.nodesVisitedTotal = 0; quadStats.nodesVisitedAccum = 0; quadStats.nodesVisitedMax = 0;
+            quadStats.intersectsChecks = 0; quadStats.pointTests = 0;
             for (let boid of gameState.boids) gameState.quadtree.insert(boid);
+            // Summarize the quadtree structure
+            (function summarize(node, depth, acc){
+                if (!node) return;
+                acc.nodeCount++;
+                if (depth > acc.maxDepth) acc.maxDepth = depth;
+                if (!node.divided) { acc.leafCount++; acc.leafFillSum = (acc.leafFillSum||0) + node.boids.length; }
+                else {
+                    summarize(node.northwest, depth+1, acc);
+                    summarize(node.northeast, depth+1, acc);
+                    summarize(node.southwest, depth+1, acc);
+                    summarize(node.southeast, depth+1, acc);
+                }
+            })(gameState.quadtree, 1, quadStats);
+            if (quadStats.leafCount > 0) quadStats.avgLeafFill = (quadStats.leafFillSum||0) / quadStats.leafCount; else quadStats.avgLeafFill = 0;
             // Pheromone decay
             if (pheromones.grid) {
                 const g = pheromones.grid; const d = pheromones.decay;
@@ -5796,6 +5860,28 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 angleHistory.push({ meanAngle, stdDev });
                 if (angleHistory.length > MAX_ANGLE_HISTORY) angleHistory.shift();
             }
+            // Quadtree metrics (if UI present)
+            const qn = document.getElementById('qt-nodes');
+            if (qn) {
+                qn.textContent = String(quadStats.nodeCount);
+                const ql = document.getElementById('qt-leaves'); if (ql) ql.textContent = String(quadStats.leafCount);
+                const qd = document.getElementById('qt-depth'); if (qd) qd.textContent = String(quadStats.maxDepth);
+                const qf = document.getElementById('qt-avgfill'); if (qf) qf.textContent = (quadStats.avgLeafFill||0).toFixed(2);
+                const qq = document.getElementById('qt-queries'); if (qq) qq.textContent = String(quadStats.queryCount);
+                const avgNodes = quadStats.queryCount ? (quadStats.nodesVisitedAccum / quadStats.queryCount) : 0;
+                const qa = document.getElementById('qt-avgnodes'); if (qa) qa.textContent = avgNodes.toFixed(2);
+                const qm = document.getElementById('qt-maxnodes'); if (qm) qm.textContent = String(quadStats.nodesVisitedMax);
+                const qi = document.getElementById('qt-intersects'); if (qi) qi.textContent = String(quadStats.intersectsChecks);
+                const qp = document.getElementById('qt-pointtests'); if (qp) qp.textContent = String(quadStats.pointTests);
+                // Chart
+                qtAvgNodesHistory.push(avgNodes);
+                if (qtAvgNodesHistory.length > 50) qtAvgNodesHistory.shift();
+                if (charts.qtAvgNodesChart) {
+                    charts.qtAvgNodesChart.data.datasets[0].data = qtAvgNodesHistory;
+                    charts.qtAvgNodesChart.update('none');
+                }
+            }
+
             drawPolarSpiralChart();
             drawMeanPolarChart();
         }
