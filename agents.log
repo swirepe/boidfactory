@@ -190,3 +190,7 @@ make a new section called 'novel' and move the kuramoto rule there. Write one ne
 write a rule that marks some boids as predators (contrasting hue): they chase prey who flee from them
 expand the help overlay to explain more about the editors and rules
 [2025-08-30 00:00] in boidlabv1.2.html, expand the help overlay to contain information about the editors and rules.  Expand the info overlay with more documentation.
+[2025-08-30 00:02] Ensure header/subheader can be set via URL; hide when empty; document params + examples in Help overlay.
+[2025-08-30 00:05] Q: how do I make an anchor tag when the url has quotes in it?
+[2025-08-30 00:07] Style header/subheader: rounded panel, glow, outline; center on canvas.
+[2025-08-30 00:10] Add Header/Subheader text inputs to Config; set defaults to 'boid lab v1.2' / 'click and drag to interact'.

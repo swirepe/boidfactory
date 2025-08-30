@@ -3576,7 +3576,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 cohesionWeight: 1.0, separationWeight: 1.5, alignmentWeight: 1.0, novelWeight: 1.2,
                 visualDensity: 1.0,
                 boidShape: 'triangle', boidSize: 10, boidSizeVariance: 2,
-                header: "Boids Simulation", subheader: "Click and drag to interact",
+                header: "boid lab v1.2", subheader: "click and drag to interact",
                 codePaneDock: 'left', // bottom | left | max
                 codePaneLeftWidth: null,
                 splitLeftRule: 'cohesion',
@@ -4010,6 +4010,25 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 appendTarget.appendChild(item);
             };
 
+            // Text input helper
+            const createText = (id, label, value, placeholder = '') => {
+                const item = document.createElement('div');
+                item.className = 'config-item';
+                item.innerHTML = `<label for="${id}">${label}</label>`;
+                const input = document.createElement('input');
+                input.type = 'text'; input.id = id; input.value = value || '';
+                if (placeholder) input.placeholder = placeholder;
+                input.addEventListener('input', e => {
+                    config[id] = e.target.value;
+                    if (config.debug) updateAllURLParams();
+                });
+                input.addEventListener('change', e => {
+                    if (!config.debug) updateURL(id, e.target.value);
+                });
+                item.appendChild(input);
+                appendTarget.appendChild(item);
+            };
+
             createSlider('boidCount', 'Boid Count', 10, 1000, 10, config.boidCount);
             createSlider('boidSize', 'Boid Size', 2, 20, 1, config.boidSize);
             createSlider('boidSizeVariance', 'Size Variance', 0, 10, 0.5, config.boidSizeVariance);
@@ -4018,6 +4037,9 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             createSlider('maxForce', 'Max Force', 0.01, 1, 0.01, config.maxForce);
             createSlider('perceptionRadius', 'Perception', 10, 200, 1, config.perceptionRadius);
             createSlider('visualDensity', 'Visual Density', 0, 2, 0.05, config.visualDensity);
+            // Labels
+            createText('header', 'Header', (typeof config.header === 'string' ? config.header : ''), 'boid lab v1.2');
+            createText('subheader', 'Subheader', (typeof config.subheader === 'string' ? config.subheader : ''), 'click and drag to interact');
             // Perception hue blend controls
             createToggle('perceptionBlend', 'Perception Hue Blend', config.perceptionBlend);
             createSlider('perceptionBlendRate', 'Perception Blend Rate', 0, 0.4, 0.01, config.perceptionBlendRate);
@@ -4430,6 +4452,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 <h3>URL Parameters</h3>
                 <p>Most settings persist via the URL. Values are JSON‑parsed, so booleans and numbers work as expected.</p>
                 <ul>
+                    <li><code>header</code>: string — page title shown on canvas (omit or set empty to hide)</li>
+                    <li><code>subheader</code>: string — subtitle shown on canvas (omit or set empty to hide)</li>
                     <li><code>hue</code>: number (theme hue)</li>
                     <li><code>boidCount</code>, <code>boidSize</code>, <code>boidSizeVariance</code>, <code>boidShape</code> (triangle|circle|oval|ring)</li>
                     <li><code>maxSpeed</code>, <code>maxForce</code>, <code>perceptionRadius</code>, <code>visualDensity</code></li>
@@ -4445,6 +4469,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 </ul>
                 <h4>Examples</h4>
                 <ul>
+                    <li><code>${urlBase}?header=My%20Boids&subheader=Have%20fun%20with%20rules</code></li>
                     <li><code>${urlBase}?presetIncludeCore=false&amp;presetTheme=flash&amp;randomPresets=true</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetCount=6&amp;presetTheme=mouse&amp;randomPresets=6</code></li>
                     <li><code>${urlBase}?presetIncludeCore=true&amp;presetBundle=ai-ml-pack</code></li>
@@ -5344,12 +5369,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             ctx.beginPath();
             ctx.arc(mouse.pos.x, mouse.pos.y, 5, 0, Math.PI * 2);
             ctx.fill();
-            ctx.fillStyle = `hsla(${config.hue}, 100%, 80%, 0.8)`;
-            ctx.font = 'bold 36px sans-serif';
-            ctx.textAlign = 'center';
-            ctx.fillText(config.header, gameState.width / 2, 50);
-            ctx.font = '24px sans-serif';
-            ctx.fillText(config.subheader, gameState.width / 2, 90);
+            // Styled header/subheader panel (centered, rounded, with glow/outline)
+            drawHeaderPanel(ctx, gameState.width / 2);
 
             // Debug: show number of drawables this frame (enable with ?debug=true)
             if (config.debug) {
@@ -5360,6 +5381,84 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 ctx.fillText(`drawables: ${drawables.length}`, 10, 18);
                 ctx.restore();
             }
+        }
+
+        // --- UI helpers ---
+        function drawHeaderPanel(ctx, centerX) {
+            const headerText = (typeof config.header === 'string') ? config.header.trim() : '';
+            const subheaderText = (typeof config.subheader === 'string') ? config.subheader.trim() : '';
+            if (!headerText && !subheaderText) return;
+            const padX = 16, padY = 10, gap = 6, topY = 16, radius = 10;
+            // Measure text
+            ctx.textAlign = 'center';
+            ctx.font = 'bold 36px sans-serif';
+            const hMetrics = headerText ? ctx.measureText(headerText) : { width: 0, actualBoundingBoxAscent: 0, actualBoundingBoxDescent: 0 };
+            const hAscent = hMetrics.actualBoundingBoxAscent || 28;
+            const hDescent = hMetrics.actualBoundingBoxDescent || 8;
+            const hLine = headerText ? (hAscent + hDescent) : 0;
+            ctx.font = '24px sans-serif';
+            const sMetrics = subheaderText ? ctx.measureText(subheaderText) : { width: 0, actualBoundingBoxAscent: 0, actualBoundingBoxDescent: 0 };
+            const sAscent = sMetrics.actualBoundingBoxAscent || 18;
+            const sDescent = sMetrics.actualBoundingBoxDescent || 6;
+            const sLine = subheaderText ? (sAscent + sDescent) : 0;
+            const maxWidth = Math.max(hMetrics.width || 0, sMetrics.width || 0);
+            const panelW = Math.ceil(maxWidth + padX * 2);
+            const panelH = Math.ceil(padY * 2 + hLine + (subheaderText ? (gap + sLine) : 0));
+            const panelX = Math.round(centerX - panelW / 2);
+            const panelY = topY;
+            // Panel background and border
+            ctx.save();
+            roundRect(ctx, panelX, panelY, panelW, panelH, radius);
+            ctx.fillStyle = 'rgba(0,0,0,0.35)';
+            ctx.fill();
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = `hsla(${config.hue}, 100%, 60%, 0.35)`;
+            ctx.stroke();
+            ctx.restore();
+            // Text with subtle glow and dark outline
+            const textColor = `hsla(${config.hue}, 100%, 85%, 0.95)`;
+            // Header line baseline
+            let y = panelY + padY + (headerText ? hAscent : 0);
+            if (headerText) {
+                ctx.save();
+                ctx.font = 'bold 36px sans-serif';
+                ctx.fillStyle = textColor;
+                ctx.shadowColor = `hsla(${config.hue}, 100%, 55%, 0.45)`;
+                ctx.shadowBlur = 10; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+                ctx.fillText(headerText, centerX, y);
+                ctx.shadowBlur = 0;
+                ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+                ctx.strokeText(headerText, centerX, y);
+                ctx.restore();
+            }
+            if (subheaderText) {
+                y = panelY + padY + hLine + gap + sAscent;
+                ctx.save();
+                ctx.font = '24px sans-serif';
+                ctx.fillStyle = textColor;
+                ctx.shadowColor = 'rgba(0,0,0,0.35)';
+                ctx.shadowBlur = 6; ctx.shadowOffsetX = 0; ctx.shadowOffsetY = 0;
+                ctx.fillText(subheaderText, centerX, y);
+                ctx.shadowBlur = 0;
+                ctx.lineWidth = 1.5; ctx.strokeStyle = 'rgba(0,0,0,0.4)';
+                ctx.strokeText(subheaderText, centerX, y);
+                ctx.restore();
+            }
+        }
+
+        function roundRect(ctx, x, y, w, h, r) {
+            const rr = Math.min(r || 0, w / 2, h / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + rr, y);
+            ctx.lineTo(x + w - rr, y);
+            ctx.quadraticCurveTo(x + w, y, x + w, y + rr);
+            ctx.lineTo(x + w, y + h - rr);
+            ctx.quadraticCurveTo(x + w, y + h, x + w - rr, y + h);
+            ctx.lineTo(x + rr, y + h);
+            ctx.quadraticCurveTo(x, y + h, x, y + h - rr);
+            ctx.lineTo(x, y + rr);
+            ctx.quadraticCurveTo(x, y, x + rr, y);
+            ctx.closePath();
         }
 
         function updateStats(updateTime) {
