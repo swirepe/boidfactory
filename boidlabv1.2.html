@@ -613,6 +613,15 @@
             grid: null,
             decay: 0.97,
         };
+        // Quadtree hotspot heat (decayed over time)
+        const qtHeat = {
+            enabled: true,
+            cell: 16,
+            cols: 0,
+            rows: 0,
+            grid: null,
+            decay: 0.98,
+        };
 
         const RuleAPI = {
             depositTrail(x, y, amount = 1) {
@@ -760,6 +769,7 @@
                 this.capacity = capacity;
                 this.boids = [];
                 this.divided = false;
+                this.visitHits = 0; // number of times this node accepted a query this frame
             }
 
             subdivide() {
@@ -797,6 +807,16 @@
                 quadStats.intersectsChecks++;
                 if (!this.boundary.intersects(range)) return found;
                 quadStats.nodesVisitedTotal++;
+                this.visitHits++;
+                // Deposit heat at node center (coarse) for hot regions overlay
+                try {
+                    if (qtHeat.grid && config.visualizeQuadtreeHot) {
+                        const cx = Math.floor(Math.max(0, Math.min(gameState.width - 1, this.boundary.x)) / qtHeat.cell);
+                        const cy = Math.floor(Math.max(0, Math.min(gameState.height - 1, this.boundary.y)) / qtHeat.cell);
+                        const i = cy * qtHeat.cols + cx;
+                        if (i >= 0 && i < qtHeat.grid.length) qtHeat.grid[i] += 0.2;
+                    }
+                } catch (e) {}
                 for (let b of this.boids) {
                     quadStats.pointTests++;
                     if (range.contains(b)) found.push(b);
@@ -819,6 +839,12 @@
             }
 
             draw(ctx) {
+                // Optional fill to indicate query visits this frame
+                if (config.visualizeQuadtreeVisits && (this.visitHits||0) > 0) {
+                    const a = Math.min(0.35, ((this.visitHits||0) / Math.max(1, quadStats.visitMax||1)) * 0.35);
+                    ctx.fillStyle = `hsla(${(config.hue + 200) % 360}, 100%, 60%, ${a.toFixed(3)})`;
+                    ctx.fillRect(this.boundary.x - this.boundary.w, this.boundary.y - this.boundary.h, this.boundary.w * 2, this.boundary.h * 2);
+                }
                 ctx.strokeStyle = `hsla(${config.hue}, 100%, 50%, 0.2)`;
                 ctx.strokeRect(this.boundary.x - this.boundary.w, this.boundary.y - this.boundary.h, this.boundary.w * 2, this.boundary.h * 2);
                 if (this.divided) {
@@ -3820,6 +3846,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             config = {
                 hue: 200, boidCount: 200, maxSpeed: 3, maxForce: 0.2,
                 perceptionRadius: 50, visualizeQuadtree: true, debug: false,
+                visualizeQuadtreeVisits: false,
+                visualizeQuadtreeHot: false,
                 cohesionWeight: 1.0, separationWeight: 1.5, alignmentWeight: 1.0, novelWeight: 1.2,
                 visualDensity: 1.0,
                 boidShape: 'triangle', boidSize: 10, boidSizeVariance: 2,
@@ -3925,6 +3953,10 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             pheromones.cols = Math.max(1, Math.ceil(gameState.width / pheromones.cell));
             pheromones.rows = Math.max(1, Math.ceil(gameState.height / pheromones.cell));
             pheromones.grid = new Float32Array(pheromones.cols * pheromones.rows);
+            // Quadtree heat grid sizing
+            qtHeat.cols = Math.max(1, Math.ceil(gameState.width / qtHeat.cell));
+            qtHeat.rows = Math.max(1, Math.ceil(gameState.height / qtHeat.cell));
+            qtHeat.grid = new Float32Array(qtHeat.cols * qtHeat.rows);
             if (gameState.boids.length > 0) createBoids();
         }
 
@@ -4295,6 +4327,10 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             // Perception hue blend controls
             createToggle('perceptionBlend', 'Perception Hue Blend', config.perceptionBlend);
             createSlider('perceptionBlendRate', 'Perception Blend Rate', 0, 0.4, 0.01, config.perceptionBlendRate);
+            // Quadtree visualization toggles
+            createToggle('visualizeQuadtree', 'Show Quadtree Bounds', config.visualizeQuadtree);
+            createToggle('visualizeQuadtreeVisits', 'Quadtree Query Visits (frame)', !!config.visualizeQuadtreeVisits);
+            createToggle('visualizeQuadtreeHot', 'Quadtree Hot Regions (decayed)', !!config.visualizeQuadtreeHot);
             // Novel rule configuration sections (shown when selected)
             const novelWrap = document.createElement('div'); novelWrap.id='novel-config-sections'; appendTarget.appendChild(novelWrap);
             // Helper to toggle visibility based on active editor tab
@@ -5662,6 +5698,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 if (!node) return;
                 acc.nodeCount++;
                 if (depth > acc.maxDepth) acc.maxDepth = depth;
+                acc.visitMax = Math.max(acc.visitMax||0, node.visitHits||0);
                 if (!node.divided) { acc.leafCount++; acc.leafFillSum = (acc.leafFillSum||0) + node.boids.length; }
                 else {
                     summarize(node.northwest, depth+1, acc);
@@ -5674,6 +5711,11 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             // Pheromone decay
             if (pheromones.grid) {
                 const g = pheromones.grid; const d = pheromones.decay;
+                for (let i = 0; i < g.length; i++) g[i] *= d;
+            }
+            // Quadtree heat decay
+            if (qtHeat.grid) {
+                const g = qtHeat.grid; const d = qtHeat.decay;
                 for (let i = 0; i < g.length; i++) g[i] *= d;
             }
             // Protect simulation step from rule runtime errors
@@ -5701,6 +5743,20 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                         if (v > 0.02) {
                             const a = Math.min(0.25, v * 0.08);
                             ctx.fillStyle = `hsla(${(config.hue + 60) % 360}, 100%, 60%, ${a.toFixed(3)})`;
+                            ctx.fillRect(x * cell, y * cell, cell, cell);
+                        }
+                    }
+                }
+            }
+            // Draw quadtree hot regions heatmap
+            if (qtHeat.grid && config.visualizeQuadtreeHot) {
+                const cell = qtHeat.cell; const g = qtHeat.grid;
+                for (let y = 0; y < qtHeat.rows; y++) {
+                    for (let x = 0; x < qtHeat.cols; x++) {
+                        const v = g[y * qtHeat.cols + x];
+                        if (v > 0.02) {
+                            const a = Math.min(0.22, v * 0.06);
+                            ctx.fillStyle = `hsla(${(config.hue + 300) % 360}, 100%, 60%, ${a.toFixed(3)})`;
                             ctx.fillRect(x * cell, y * cell, cell, cell);
                         }
                     }
