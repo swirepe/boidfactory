@@ -3867,6 +3867,147 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
   return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.95);
 })();` },
 
+          { id: 'novel-physarum-phyllotaxis', name: 'Novel — Physarum Phyllotaxis Foragers', code: `/**
+  Physarum Phyllotaxis Foragers
+
+  Two Natural Inspirations
+  ————————————————————
+  • Physarum (Slime Mold) Foraging: local chemo-sensing with three forward sensors,\n    trail deposition, and decentralized lane formation.
+  • Phyllotaxis Spiral Fields: golden‑angle seed placement (sunflower pattern) used\n    as drifting nutrient hubs that modulate attraction.
+
+  Emergent Behavior
+  ———————————
+  • Crowded, living roads form and split as boids compete/cooperate following trails\n    while the spiral nutrient field slowly rotates and breathes, reshaping flow.
+
+  Visual Language (no glow)
+  ———————————————
+  • Sunflower lattice: crisp seed dots and faint radial arcs.\n  • Lane etching: thin strokes along current heading; sparse stipple on turns.\n  • No blur/glow; relies on density and geometry for stunning patterns.
+
+  Parameters (internal)
+  —————————————
+  • sensorDist, sensorAngle: Physarum triplet sampling geometry.\n  • deposit: trail intensity back into the pheromone grid.\n  • seeds: precomputed phyllotaxis anchors, rotate/scale over time.
+  @returns {Vector}
+*/
+(function(){
+  // 1) Seed a golden‑angle lattice (cached)
+  const N = 420; // number of seeds
+  const pad = 36; // canvas padding
+  const twoPi = Math.PI * 2;
+  const phi = Math.PI * (3 - Math.sqrt(5)); // golden angle ~ 2.39996
+  if (!gameState._phySeeds || gameState._phySeeds.length !== N) {
+    const seeds = new Array(N);
+    for (let n = 0; n < N; n++) seeds[n] = { x: 0, y: 0 };
+    gameState._phySeeds = seeds;
+  }
+  // time-varying placement (rotation + breathing)
+  const t = performance.now() * 0.0015;
+  const Rw = gameState.width - pad*2, Rh = gameState.height - pad*2;
+  const S = Math.min(Rw, Rh) * (0.48 + 0.06*Math.sin(t*0.9));
+  const rot = 0.3 * Math.sin(t*0.7);
+  const cx = gameState.width * 0.5 + 20*Math.sin(t*0.23);
+  const cy = gameState.height * 0.5 + 14*Math.cos(t*0.19);
+  const seeds = gameState._phySeeds;
+  for (let n = 0; n < N; n++) {
+    const r = Math.sqrt((n+0.5)/N) * S;
+    const a = n * phi + rot;
+    const x = cx + r * Math.cos(a);
+    const y = cy + r * Math.sin(a);
+    seeds[n].x = x; seeds[n].y = y;
+  }
+
+  // 2) Draw phyllotaxis skeleton sparsely (once per few ms)
+  if (!gameState._phyDrawStamp || performance.now() - gameState._phyDrawStamp > 30) {
+    gameState._phyDrawStamp = performance.now();
+    if (typeof api !== 'undefined' && api && api.addDrawable) {
+      const hue = (config.hue + 90) % 360;
+      api.addDrawable((ctx) => {
+        // seeds as crisp dots
+        ctx.fillStyle = 'hsla(' + hue + ',100%,65%,0.30)';
+        for (let i=0; i<N; i+=4) { // thin out to reduce fill cost
+          const s = seeds[i];
+          ctx.fillRect(s.x-0.6, s.y-0.6, 1.2, 1.2);
+        }
+        // faint spiral arcs (subsample)
+        ctx.beginPath();
+        ctx.strokeStyle = 'hsla(' + ((hue+40)%360) + ',100%,60%,0.14)';
+        ctx.lineWidth = 1;
+        for (let i=8; i<N; i+=21) {
+          const a0 = (i-8) * phi + rot, a1 = i * phi + rot;
+          const r0 = Math.sqrt((i-8+0.5)/N) * S; const r1 = Math.sqrt((i+0.5)/N) * S;
+          const x0 = cx + r0 * Math.cos(a0), y0 = cy + r0 * Math.sin(a0);
+          const x1 = cx + r1 * Math.cos(a1), y1 = cy + r1 * Math.sin(a1);
+          ctx.moveTo(x0, y0); ctx.lineTo(x1, y1);
+        }
+        ctx.stroke();
+      });
+    }
+  }
+
+  // 3) Physarum‑style three‑sensor sampling
+  const sensorDist = 22;
+  const sensorAngle = 0.65; // radians
+  const head = Math.atan2(boid.vel.y, boid.vel.x);
+
+  function sampleField(px, py) {
+    // pheromone sample (normalize by grid density)
+    let v = 0;
+    if (pheromones && pheromones.grid) {
+      const c = Math.floor(Math.max(0, Math.min(pheromones.cols - 1, px / pheromones.cell)));
+      const r = Math.floor(Math.max(0, Math.min(pheromones.rows - 1, py / pheromones.cell)));
+      v += (pheromones.grid[r * pheromones.cols + c] || 0) * 0.9;
+    }
+    // nutrient pull from nearest few seeds (inverse‑square falloff)
+    let best = 0;
+    for (let k=0; k<N; k+=Math.max(1, Math.floor(N/180))) { // coarse scan
+      const s = seeds[k];
+      const dx = s.x - px, dy = s.y - py;
+      const d2 = dx*dx + dy*dy;
+      best = Math.max(best, 1 / (1 + d2 * 0.001));
+    }
+    return v + best * 1.0;
+  }
+
+  const fx = boid.pos.x + Math.cos(head) * sensorDist;
+  const fy = boid.pos.y + Math.sin(head) * sensorDist;
+  const lx = boid.pos.x + Math.cos(head - sensorAngle) * sensorDist;
+  const ly = boid.pos.y + Math.sin(head - sensorAngle) * sensorDist;
+  const rx = boid.pos.x + Math.cos(head + sensorAngle) * sensorDist;
+  const ry = boid.pos.y + Math.sin(head + sensorAngle) * sensorDist;
+  const fScore = sampleField(fx, fy);
+  const lScore = sampleField(lx, ly);
+  const rScore = sampleField(rx, ry);
+
+  let turn = 0;
+  if (lScore > fScore && lScore >= rScore) turn = -1;
+  else if (rScore > fScore && rScore > lScore) turn = +1;
+  else turn = (Math.random() < 0.06 ? (Math.random()<0.5?-1:1) : 0); // occasional nudge
+
+  const targetAngle = head + turn * (0.22 + 0.15*Math.random());
+  const desired = new Vector(Math.cos(targetAngle), Math.sin(targetAngle)).mult(boid.maxSpeed * 0.92);
+
+  // trail deposition (heavier when moving fast)
+  if (typeof api !== 'undefined' && api && api.depositTrail) {
+    api.depositTrail(boid.pos.x, boid.pos.y, 0.7 + 0.2 * boid.vel.mag());
+  }
+
+  // lane etching + minimal heading tick
+  if (typeof api !== 'undefined' && api && api.addDrawable) {
+    const x = boid.pos.x, y = boid.pos.y;
+    const dir = desired.clone().normalize();
+    api.addDrawable((ctx) => {
+      // main stroke
+      ctx.beginPath(); ctx.moveTo(x - dir.x*6, y - dir.y*6); ctx.lineTo(x + dir.x*10, y + dir.y*10);
+      ctx.strokeStyle = 'hsla(' + (boid.hue) + ',100%,60%,0.28)'; ctx.lineWidth = 1.2; ctx.stroke();
+      // heading tick
+      const ortx = -dir.y, orty = dir.x;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + ortx*4, y + orty*4);
+      ctx.strokeStyle = 'hsla(' + (((config.hue+20)%360)) + ',100%,62%,0.22)'; ctx.lineWidth = 1; ctx.stroke();
+    });
+  }
+
+  return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.95);
+})();` },
+
           { id: 'physics-coulomb-gas', name: 'Physics — Coulomb Gas', code: `/**
   Coulomb Gas (Mutual Repulsion)
   Neighbors repel with 1/r potential; damped by distance. Produces gas-like spreading.
