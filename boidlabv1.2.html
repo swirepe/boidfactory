@@ -802,6 +802,9 @@
         
         const defaultFunctionsCode = {
           cohesion: `/**
+  Cohesion — steer toward the average position of nearby boids.
+  Steer toward the neighbors' centroid to keep the flock together.
+
   Rule API
   @function rule
   @param {Boid} boid - Current boid under update (pos, vel, acc, maxSpeed, maxForce, size, hue)
@@ -812,8 +815,6 @@
   @param {typeof Vector} Vector - 2D vector helper class
   @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api - Optional visuals helpers
   @returns {Vector} Steering force to apply this frame
-
-  Cohesion: steer toward the average position of nearby boids.
   Steps:
     1) Average neighbor positions within perception radius
     2) Desired velocity toward that center at maxSpeed
@@ -837,6 +838,9 @@ const desired = Vector.sub(center, boid.pos).normalize().mult(boid.maxSpeed);
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);`,
 
           separation: `/**
+  Separation — steer away from nearby boids to avoid crowding.
+  Avoid collisions using a strong inverse‑square repulsion at close range.
+
   Rule API
   @function rule
   @param {Boid} boid
@@ -847,8 +851,6 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);`,
   @param {typeof Vector} Vector
   @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api
   @returns {Vector}
-
-  Separation: steer away from nearby boids to avoid crowding.
   Strategy: Inverse-square falloff (1/d^2) gives strong close-range repulsion.
   Tip: Slightly higher force multiplier helps quick response.
 */
@@ -872,6 +874,9 @@ steer.div(total).normalize().mult(boid.maxSpeed);
 return Vector.sub(steer, boid.vel).limit(boid.maxForce * 1.5);`,
 
           alignment: `/**
+  Alignment — match the average heading (velocity) of neighbors.
+  Blend your heading with the local mean velocity to synchronize motion.
+
   Rule API
   @function rule
   @param {Boid} boid
@@ -882,8 +887,6 @@ return Vector.sub(steer, boid.vel).limit(boid.maxForce * 1.5);`,
   @param {typeof Vector} Vector
   @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api
   @returns {Vector}
-
-  Alignment: match the average heading (velocity) of neighbors.
 */
 const radius = config.perceptionRadius;
 let avgVel = new Vector(0, 0);
@@ -902,6 +905,9 @@ avgVel.div(total).normalize().mult(boid.maxSpeed);
 return Vector.sub(avgVel, boid.vel).limit(boid.maxForce);`,
 
           novel: `/**
+  Novel — mouse-driven flee force when mouse is down.
+  When pressed, boids within a radius steer away from the cursor.
+
   Rule API
   @function rule
   @param {Boid} boid
@@ -912,8 +918,6 @@ return Vector.sub(avgVel, boid.vel).limit(boid.maxForce);`,
   @param {typeof Vector} Vector
   @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api
   @returns {Vector}
-
-  Novel: mouse-driven flee force when mouse is down.
   Behavior: if within fleeRadius of the cursor, push away proportionally.
 */
 const mouseForce = new Vector(0, 0);
@@ -3403,7 +3407,7 @@ const desired = dir.mult(boid.maxSpeed*0.85);
 if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; const back=boid.vel.clone().normalize().mult(-8); api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+back.x,y+back.y); ctx.strokeStyle='hsla(' + (boid.hue) + ',100%,70%,0.16)'; ctx.stroke(); }); }
 return Vector.sub(desired, boid.vel).limit(boid.maxForce*0.8);` },
 
-          { id: 'ml-dbscan-core', name: 'ML — DBSCAN Density Core', code: `/**
+          { id: 'ml-dbscan-density', name: 'ML — DBSCAN Density Core', code: `/**
   DBSCAN Density Core
   If enough neighbors within eps, treat as core: pull toward local centroid; else wander.
   Visuals: Circle ring when core; centroid line.
@@ -3671,8 +3675,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.9);` },
           { id: 'ai-epsilon-greedy', name: 'AI — Epsilon-Greedy Explorer', code: `/**
   Epsilon-Greedy Explorer
   With probability eps, explore randomly; otherwise climb the pheromone gradient ("exploit").
-  Also deposits positive trail to reinforce explored paths.
-
+  
   Visuals:
   - Blue jitter when exploring, red arrow when exploiting.
   @returns {Vector}
@@ -4458,15 +4461,12 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     const m = src.match(/\/\*\*([\s\S]*?)\*\//);
                     if (m) {
                         const raw = m[1].split('\n').map(s => s.replace(/^[\s\*]+/,'').trim());
-                        // Skip empty and tag lines; skip a leading title line that matches name
-                        let started = false;
-                        for (let line of raw){
-                            if (!line) continue;
-                            if (line.startsWith('@')) continue;
-                            if (!started) { started = true; if ((p.name||'').toLowerCase().startsWith(line.toLowerCase())) continue; }
-                            // Return first meaningful sentence
-                            return line.replace(/\s+/g,' ').trim();
-                        }
+                        // Drop empty, @-tags, generic headings, and underline-only lines
+                        const headingRe = /^(concept|visuals|mechanics|parameters|returns|notes|behavior|config|steering|fields|model|pipeline|overview|summary)\s*:?$/i;
+                        const underlineRe = /^[\-—–_\s]+$/;
+                        const lines = raw.filter(line => line && !line.startsWith('@') && !/^Rule\s+API\b/i.test(line) && !headingRe.test(line) && !underlineRe.test(line));
+                        if (lines.length > 1) return lines[1].replace(/\s+/g,' ').trim();
+                        if (lines.length > 0) return lines[0].replace(/\s+/g,' ').trim();
                     }
                 } catch(e) {}
                 return '';
@@ -5324,7 +5324,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 'clustering-pack': [
                     'ml-kmeans-centroids',
                     'ml-gaussian-mixture',
-                    'ml-dbscan-core',
+                    'ml-dbscan-density',
                     'ml-pca-velocity'
                 ],
                 'optimization-pack': [

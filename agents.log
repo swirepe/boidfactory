@@ -196,3 +196,9 @@ expand the help overlay to explain more about the editors and rules
 [2025-08-30 00:10] Add Header/Subheader text inputs to Config; set defaults to 'boid lab v1.2' / 'click and drag to interact'.
 [2025-08-30 00:14] Added novel rule preset 'Novel — Triadic Resonance Flocking' with rich visuals and triadic resonance mechanics.
 [2025-08-30 00:18] Rules tab: added brief descriptions per preset, search matches descriptions, and a Show descriptions toggle persisted to URL.
+[2025-08-30 00:22] Ensured concise top JSDoc descriptions: updated core rule JSDoc first lines; refined description extractor to ignore 'Rule API'.
+[2025-08-30 00:25] Tweaked JSDoc description for 'AI — Epsilon-Greedy Explorer' to a single clear one-liner for the Rules tab.
+[2025-08-30 00:29] Reverted Epsilon-Greedy JSDoc title; changed description parser to use first two JSDoc lines (skips tags/Rule API) and join with an em dash.
+[2025-08-30 00:33] Change Rules tab description extractor: use second meaningful JSDoc line (fallback to first).
+[2025-08-30 00:38] Core rule descriptions: added second-line one-liners so the Rules tab shows clear summaries for cohesion, separation, alignment, and novel (core).
+[2025-08-30 00:42] Fixed Rules tab descriptions showing 'Concept' for novel rules by skipping heading/underline lines in the parser.
