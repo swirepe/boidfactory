@@ -738,6 +738,15 @@
             logConfig(`URL updated: ${key} = ${JSON.stringify(value)}`);
         }
 
+        function removeURL(key) {
+            const params = new URLSearchParams(window.location.search);
+            params.delete(key);
+            const qs = params.toString();
+            const newUrl = qs ? `${window.location.pathname}?${qs}` : window.location.pathname;
+            window.history.pushState({ path: newUrl }, '', newUrl);
+            logConfig(`URL removed: ${key}`);
+        }
+
         function updateAllURLParams() {
             if (!config.debug) return;
             const params = new URLSearchParams();
@@ -5266,7 +5275,15 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                         item.appendChild(cfg);
                         // Show only when the rule is selected
                         cfg.style.display = cb.checked ? 'flex' : 'none';
-                        cb.addEventListener('change', () => { cfg.style.display = cb.checked ? 'flex' : 'none'; });
+                        cb.addEventListener('change', () => {
+                            cfg.style.display = cb.checked ? 'flex' : 'none';
+                            if (!config.debug) {
+                                try {
+                                    if (cb.checked) updateURL(weightKey, config[weightKey]);
+                                    else removeURL(weightKey);
+                                } catch(e){}
+                            }
+                        });
                     })();
 
                     // Inline Novel configuration: always show under Novel rules
@@ -5370,6 +5387,14 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                             cb.checked = true;
                             const item = cb.closest('[data-preset]');
                             const w = item && item.querySelector('.rule-inline-weight'); if (w) w.style.display = 'flex';
+                            if (!config.debug) {
+                                // Ensure weight is present in URL when selecting
+                                const label = cb.closest('[data-preset]')?.querySelector('label span');
+                                const human = label ? (label.textContent||'') : '';
+                                const keyName = (typeof sanitizeRuleName === 'function') ? sanitizeRuleName(human) : human.toLowerCase();
+                                const weightKey = `${keyName}Weight`;
+                                try { updateURL(weightKey, config[weightKey] ?? 1.0); } catch(e){}
+                            }
                         }
                     });
                     saveRulesSelection();
@@ -5380,6 +5405,13 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                             cb.checked = false;
                             const item = cb.closest('[data-preset]');
                             const w = item && item.querySelector('.rule-inline-weight'); if (w) w.style.display = 'none';
+                            if (!config.debug) {
+                                const label = cb.closest('[data-preset]')?.querySelector('label span');
+                                const human = label ? (label.textContent||'') : '';
+                                const keyName = (typeof sanitizeRuleName === 'function') ? sanitizeRuleName(human) : human.toLowerCase();
+                                const weightKey = `${keyName}Weight`;
+                                try { removeURL(weightKey); } catch(e){}
+                            }
                         }
                     });
                     saveRulesSelection();

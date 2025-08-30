@@ -228,3 +228,5 @@ This new rule should:
 [2025-08-30 00:46:16] add novel rule 'Novel — Physarum Phyllotaxis Foragers' combining slime mold foraging + phyllotaxis; emergent lanes and spiral-driven flows without glow (boidlabv1.2.html)
 [2025-08-30 00:51:54] Rules tab: added inline Weight slider for all rules; wired addRule to honor existing weights. Added inline config for novel-physarum-phyllotaxis (sensor dist/angle, seed count) and made rule read config.
 [2025-08-30 00:53:37] Rules tab: show Weight only when selected; group All/None now toggles weight visibility accordingly.
+[2025-08-30 00:58:17] Ensure URL updates for rule weights when selecting rules (checkbox change).
+[2025-08-30 00:59:42] Added removeURL helper; on uncheck, remove rule weight from URL. Group All/None now add/remove weight URL keys accordingly.
