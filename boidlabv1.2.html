@@ -195,14 +195,19 @@
             cursor: pointer;
             background-color: #333;
             border: none;
-            color: white;
+            color: #ddd;
             border-bottom: 3px solid transparent;
-            transition: background-color 0.2s;
+            transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease;
             font-family: var(--font-mono);
+            opacity: 0.95;
         }
+        .tab-button:hover { background-color: #3a3a3a; color: #fff; }
         .tab-button.active {
             background-color: var(--background-color);
             border-bottom-color: var(--primary-color);
+            color: #fff;
+            font-weight: 600;
+            opacity: 1;
         }
         /* Indicator when a rule is using fallback due to recent runtime errors */
         .tab-button.fallback-active { position: relative; }
@@ -367,8 +372,8 @@
         }
         #help-overlay code { background-color: #333; padding: 2px 5px; border-radius: 3px; }
 
-        /* Form + button styling (exclude editor tab buttons) */
-        button:not(.dock-btn):not(.close-button):not(.tab-button) {
+        /* Form + button styling (exclude editor and config tabs) */
+        button:not(.dock-btn):not(.close-button):not(.tab-button):not(.config-tab) {
             background: linear-gradient(180deg, hsl(var(--hue), 100%, 55%), hsl(var(--hue), 100%, 47%));
             color: #fff;
             border: 1px solid rgba(255,255,255,0.18);
@@ -381,12 +386,17 @@
             box-shadow: 0 1px 0 rgba(0,0,0,0.35);
             transition: transform 0.06s ease, filter 0.12s ease;
         }
-        button:not(.dock-btn):not(.close-button):not(.tab-button):hover { filter: brightness(1.05); }
-        button:not(.dock-btn):not(.close-button):not(.tab-button):active { transform: translateY(1px); }
+        button:not(.dock-btn):not(.close-button):not(.tab-button):not(.config-tab):hover { filter: brightness(1.05); }
+        button:not(.dock-btn):not(.close-button):not(.tab-button):not(.config-tab):active { transform: translateY(1px); }
         .bar-btn { background: rgba(255,255,255,0.06) !important; border-color: rgba(255,255,255,0.18) !important; color: #eee !important; }
         .bar-btn:hover { color: #fff !important; }
-        .config-tab { background: rgba(255,255,255,0.06); border: 1px solid rgba(255,255,255,0.18); }
-        .config-tab.active { background: rgba(255,255,255,0.12); }
+        /* Config tabbar styled like tabs */
+        .config-tab-bar { display: flex; gap: 6px; border-bottom: 1px solid rgba(255,255,255,0.12); margin-bottom: 6px; }
+        .config-tab { background: #333; color: #ddd; border: none; padding: 6px 8px; border-bottom: 3px solid transparent; font-family: var(--font-mono); cursor: pointer; transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease; opacity: 0.95; }
+        .config-tab:hover { background: #3a3a3a; color: #fff; }
+        .config-tab.active { background: var(--background-color); border-bottom-color: var(--primary-color); color: #fff; font-weight: 600; opacity: 1; }
+        /* Primary action button */
+        .primary-btn { background: linear-gradient(180deg, hsl(var(--hue), 100%, 60%), hsl(var(--hue), 100%, 50%)) !important; color: #fff !important; border: 1px solid rgba(255,255,255,0.22) !important; }
         
         /* Text inputs/selects */
         .form-input,
@@ -4476,7 +4486,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 <label><input type="checkbox" id="rules-show-desc" ${config.rulesShowDescriptions ? 'checked' : ''}> Show descriptions</label>
                 <button id="rules-select-all" class="bar-btn">Select All</button>
                 <button id="rules-clear-all" class="bar-btn">Clear</button>
-                <button id="rules-apply" class="bar-btn" style="background: var(--primary-color); color: #fff; border: none;">Apply Selection</button>
+                <button id="rules-apply" class="primary-btn">Apply Selection</button>
             `;
             rulesWrap.appendChild(actions);
             const listHost = document.createElement('div'); listHost.style.display = 'grid'; listHost.style.gridTemplateColumns = 'repeat(auto-fit, minmax(240px, 1fr))'; listHost.style.gap='6px 12px'; rulesWrap.appendChild(listHost);
@@ -4517,8 +4527,10 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 // Group header with per-group actions
                 const header = document.createElement('div'); header.style.display='flex'; header.style.alignItems='center'; header.style.gap='8px'; header.style.marginBottom='4px';
                 const title = document.createElement('span'); title.textContent = group; title.style.color='var(--secondary-color)'; title.style.fontFamily='var(--font-mono)'; header.appendChild(title);
-                const btnAll = document.createElement('button'); btnAll.className='bar-btn'; btnAll.textContent='All'; btnAll.title='Select all in group'; header.appendChild(btnAll);
-                const btnNone = document.createElement('button'); btnNone.className='bar-btn'; btnNone.textContent='None'; btnNone.title='Clear group'; header.appendChild(btnNone);
+                const ctrls = document.createElement('div'); ctrls.style.display='flex'; ctrls.style.gap='6px'; ctrls.style.marginLeft='auto';
+                const btnAll = document.createElement('button'); btnAll.className='bar-btn'; btnAll.textContent='All'; btnAll.title='Select all in group'; ctrls.appendChild(btnAll);
+                const btnNone = document.createElement('button'); btnNone.className='bar-btn'; btnNone.textContent='None'; btnNone.title='Clear group'; ctrls.appendChild(btnNone);
+                header.appendChild(ctrls);
                 box.appendChild(header);
                 // Items container with vertical spacing
                 const items = document.createElement('div'); items.style.display='flex'; items.style.flexDirection='column'; items.style.rowGap='6px';
