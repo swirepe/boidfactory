@@ -194,3 +194,4 @@ expand the help overlay to explain more about the editors and rules
 [2025-08-30 00:05] Q: how do I make an anchor tag when the url has quotes in it?
 [2025-08-30 00:07] Style header/subheader: rounded panel, glow, outline; center on canvas.
 [2025-08-30 00:10] Add Header/Subheader text inputs to Config; set defaults to 'boid lab v1.2' / 'click and drag to interact'.
+[2025-08-30 00:14] Added novel rule preset 'Novel — Triadic Resonance Flocking' with rich visuals and triadic resonance mechanics.

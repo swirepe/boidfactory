@@ -1316,6 +1316,146 @@ const tang = new Vector(-toC.y, toC.x).normalize();
 const desired = tang.mult(boid.maxSpeed * 0.9);
 return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.9);` },
 
+          { id: 'novel-triadic-resonance', name: 'Novel — Triadic Resonance Flocking', code: `/**
+  Triadic Resonance Flocking (Novel)
+
+  Mechanically: blends Separation, Alignment, and Cohesion with a time‑varying
+  “resonance” target derived from the triangle (boid + two nearest neighbors).
+  The oscillating target injects structured unpredictability that ripples through
+  the flock — producing braids, lattice waves, and sudden re‑groupings.
+
+  Visuals: crisp triangulation links and partial circum‑arcs (no glow). Lines
+  are hue‑tinted with subtle alpha so structures emerge at the flock level.
+
+  Forces
+  - Separation: inverse‑square repulsion from very close neighbors.
+  - Alignment: toward the local average velocity.
+  - Cohesion: toward the dynamic resonance point (mix of centroid + triangle center).
+
+  Notes
+  - Uses a per‑boid phase (persistent) to make local oscillations de‑synchronize.
+  - Scales drawable density by config.visualDensity; avoids heavy per‑frame work.
+  - Avoids glow/shadow effects as requested.
+
+  @returns {Vector} steering
+*/
+(function(){
+  const R = config.perceptionRadius;
+  // Ensure a stable per‑boid phase and rate
+  if (typeof boid._phase !== 'number') boid._phase = Math.random() * Math.PI * 2;
+  if (typeof boid._rate !== 'number')  boid._rate  = 0.6 + Math.random() * 0.6; // rad/s
+  const t = performance.now() * 0.001; // seconds
+  const phase = boid._phase + t * boid._rate;
+  const osc = 0.5 + 0.5 * Math.sin(phase);      // 0..1
+  const osc2 = 0.5 + 0.5 * Math.sin(phase * 1.7 + 1.3);
+
+  // Gather neighbors within R and find two nearest
+  const pool = [];
+  let vAvg = new Vector(); let vN = 0;
+  for (const o of neighbors) {
+    const d = Vector.dist(boid.pos, o.pos);
+    if (d > 0 && d < R) {
+      pool.push({ o, d });
+      vAvg.add(o.vel); vN++;
+    }
+  }
+  pool.sort((a,b)=>a.d-b.d);
+  const n1 = pool[0]?.o || null;
+  const n2 = pool[1]?.o || null;
+  if (vN) vAvg.div(vN);
+
+  // Separation: strong close‑range inverse‑square
+  let sep = new Vector();
+  for (const p of pool) {
+    if (p.d < Math.max(8, config.boidSize * 2.2)) {
+      const away = Vector.sub(boid.pos, p.o.pos);
+      const m = away.mag(); if (m > 0) sep.add(away.div(m*m));
+    }
+  }
+
+  // Cohesion target: blend of centroid and triangle “resonant” center
+  // Centroid of local neighbors
+  let c = new Vector(); let cN = 0; for (const p of pool){ c.add(p.o.pos); cN++; }
+  if (cN) c.div(cN); else c = boid.pos.clone();
+  // Triangle center: if two nearest exist, use circumcenter approximation; else fallback to centroid
+  let triCenter = c.clone();
+  if (n1 && n2) {
+    const A = boid.pos, B = n1.pos, C = n2.pos;
+    const ax=A.x, ay=A.y, bx=B.x, by=B.y, cx=C.x, cy=C.y;
+    const d = 2 * (ax*(by-cy) + bx*(cy-ay) + cx*(ay-by));
+    if (Math.abs(d) > 1e-3) {
+      const ax2ay2 = ax*ax + ay*ay, bx2by2 = bx*bx + by*by, cx2cy2 = cx*cx + cy*cy;
+      const ux = (ax2ay2*(by-cy) + bx2by2*(cy-ay) + cx2cy2*(ay-by)) / d;
+      const uy = (ax2ay2*(cx-bx) + bx2by2*(ax-cx) + cx2cy2*(bx-ax)) / d;
+      triCenter = new Vector(ux, uy);
+    }
+  }
+  // Resonance point mixes centroid and triangle center with an oscillating bias
+  const resonance = c.clone().mult(1 - osc).add(triCenter.clone().mult(osc));
+
+  // Tangential swirl around resonance (adds unpredictability but stays coherent)
+  const toRes = Vector.sub(resonance, boid.pos);
+  const tang = new Vector(-toRes.y, toRes.x);
+  const swirl = (toRes.mag() > 0 ? tang.normalize().mult(boid.maxSpeed * (0.25 + 0.35*osc2)) : new Vector());
+
+  // Desired velocity from cohesion toward resonance + tangential swirl
+  const cohDir = (toRes.mag() > 0 ? toRes.clone().normalize() : new Vector());
+  const desired = cohDir.mult(boid.maxSpeed * (0.35 + 0.35*osc)).add(swirl);
+
+  // Alignment: nudge toward local average velocity
+  const align = (vN ? vAvg.clone().normalize().mult(boid.maxSpeed) : new Vector());
+
+  // Combine forces (weights tuned for balance; separation stronger up close)
+  let force = new Vector();
+  force.add(Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.9)); // cohesion+swirl
+  force.add(Vector.sub(align, boid.vel).limit(boid.maxForce * 0.4));   // alignment
+  if (sep.mag() > 0) force.add(sep.normalize().mult(boid.maxForce * 1.4)); // separation
+
+  // Optional trails (subtle, density‑aware)
+  if (typeof api !== 'undefined' && api && api.depositTrail) {
+    const amt = 0.4 + 0.4 * (osc2);
+    api.depositTrail(boid.pos.x, boid.pos.y, amt);
+  }
+
+  // Visuals: draw edges to n1/n2 and a partial arc approximating the circumcircle (if stable)
+  if (typeof api !== 'undefined' && api && api.addDrawable) {
+    // Thin out by visualDensity and local neighbor count
+    const density = Math.max(0, Math.min(2, typeof config.visualDensity === 'number' ? config.visualDensity : 1));
+    const chance = 0.25 * density; if (Math.random() < chance) {
+      const x = boid.pos.x, y = boid.pos.y;
+      const hueBase = (boid.hue + 20) % 360;
+      api.addDrawable(function(ctx){
+        // Triangulation lines
+        ctx.lineWidth = 1;
+        ctx.strokeStyle = 'hsla(' + (hueBase) + ',100%,65%,0.25)';
+        if (n1) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(n1.pos.x, n1.pos.y); ctx.stroke(); }
+        if (n2) { ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(n2.pos.x, n2.pos.y); ctx.stroke(); }
+        if (n1 && n2) {
+          // Partial arc around resonance center with radius to boid
+          const vx = x - resonance.x, vy = y - resonance.y;
+          const rad = Math.hypot(vx, vy);
+          if (rad > 2 && Number.isFinite(rad)) {
+            const a0 = Math.atan2(n1.pos.y - resonance.y, n1.pos.x - resonance.x);
+            const a1 = Math.atan2(n2.pos.y - resonance.y, n2.pos.x - resonance.x);
+            // Ensure minor arc direction
+            let da = a1 - a0; while (da > Math.PI) da -= 2*Math.PI; while (da < -Math.PI) da += 2*Math.PI;
+            const mid = a0 + da * 0.5;
+            const span = Math.abs(da) * (0.4 + 0.3*osc); // shorter than chord angle
+            ctx.setLineDash([4,3]);
+            ctx.beginPath();
+            ctx.arc(resonance.x, resonance.y, rad, mid - span/2, mid + span/2);
+            ctx.strokeStyle = 'hsla(' + ((hueBase+40)%360) + ',100%,65%,0.22)';
+            ctx.stroke();
+            ctx.setLineDash([]);
+          }
+        }
+      });
+    }
+  }
+
+  return force.limit(boid.maxForce * 1.8);
+})();` },
+
           { id: 'jitter', name: 'Subtle Jitter', code: `/**
   Subtle Jitter
   Add gentle noise for shimmering, organic motion
