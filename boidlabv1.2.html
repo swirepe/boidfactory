@@ -4432,7 +4432,6 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             rulesWrap.appendChild(searchRow);
             const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px'; actions.style.alignItems='center'; actions.style.flexWrap='wrap';
             actions.innerHTML = `
-                <label><input type="checkbox" id="rules-include-core" ${config.presetIncludeCore ? 'checked' : ''}> Include core rules</label>
                 <label><input type="checkbox" id="rules-show-desc" ${config.rulesShowDescriptions ? 'checked' : ''}> Show descriptions</label>
                 <button id="rules-select-all" class="bar-btn">Select All</button>
                 <button id="rules-clear-all" class="bar-btn">Clear</button>
@@ -4548,8 +4547,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             });
             rulesWrap.querySelector('#rules-apply').addEventListener('click', () => {
                 const ids = Array.from(rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]:checked')).map(el => el.value);
-                const includeCore = !!rulesWrap.querySelector('#rules-include-core')?.checked;
-                applyPresetSelection(ids, includeCore);
+                applyPresetSelection(ids, !!config.presetIncludeCore);
             });
             function saveRulesSelection() {
                 const ids = Array.from(rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]:checked')).map(el => el.value);
