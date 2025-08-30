@@ -2496,6 +2496,81 @@ if (typeof api!=='undefined' && api && api.addDrawable) {
 
 return steer.limit(boid.maxForce);` },
 
+          { id: 'novel-predator-prey', name: 'Novel — Predator–Prey Pursuit', code: `/**
+  Predator–Prey Pursuit (Emergent Chase & Flee)
+
+  Concept
+  ————
+  A fraction of boids are marked as predators; the rest are prey. Predators
+  hunt nearby prey; prey flee nearby predators. This creates emergent waves of
+  pursuit and evasion, with visually contrasting hues and connective cues.
+
+  Config
+  —————
+    predatorFrac   (default 0.12) — fraction of predators
+    predatorBoost  (default 1.25) — speed factor for predators
+    preyPanic      (default 1.15) — speed factor for prey when fleeing
+
+  Visuals
+  —————
+    • Predators: contrasting hue (hue+180), faint pursuit lines
+    • Prey: base hue, occasional panic halo while fleeing
+
+  Returns
+  —————
+  A steering vector that biases toward (predator) or away (prey) neighbors.
+  */
+// Defaults from config
+const frac = (typeof config.predatorFrac==='number') ? Math.max(0, Math.min(0.9, config.predatorFrac)) : 0.12;
+const pBoost = (typeof config.predatorBoost==='number') ? Math.max(0.5, Math.min(2.0, config.predatorBoost)) : 1.25;
+const panic = (typeof config.preyPanic==='number') ? Math.max(0.5, Math.min(2.0, config.preyPanic)) : 1.15;
+
+// Assign role once
+if (!boid._role) {
+  boid._role = (Math.random() < frac) ? 'pred' : 'prey';
+}
+// Set visual hue by role
+if (boid._role === 'pred') boid.hue = ((config.hue||200) + 180) % 360; else boid.hue = (config.hue||200);
+
+// Find nearest target/opponent within perception
+const Rp = (config.perceptionRadius||50);
+let nearest = null, nd = 1e9;
+for (const o of neighbors) {
+  const d = Vector.dist(boid.pos, o.pos);
+  if (d>0 && d<Rp) {
+    if (boid._role === 'pred' && o._role !== 'pred') { if (d<nd) { nd=d; nearest=o; } }
+    if (boid._role !== 'pred' && o._role === 'pred') { if (d<nd) { nd=d; nearest=o; } }
+  }
+}
+
+let steer = new Vector();
+if (nearest) {
+  const dir = (boid._role==='pred') ? Vector.sub(nearest.pos, boid.pos) : Vector.sub(boid.pos, nearest.pos);
+  const spd = (boid._role==='pred') ? (boid.maxSpeed*pBoost) : (boid.maxSpeed*panic);
+  const desired = dir.normalize().mult(spd);
+  steer = Vector.sub(desired, boid.vel).limit(boid.maxForce * (boid._role==='pred' ? 1.2 : 1.0));
+}
+
+// Soft bias to keep momentum if no interaction
+if (nearest === null) {
+  const desired = boid.vel.clone().normalize().mult(boid.maxSpeed*0.9);
+  steer.add(Vector.sub(desired, boid.vel).limit(boid.maxForce*0.4));
+}
+
+// Visuals
+if (typeof api!=='undefined' && api && api.addDrawable) {
+  const x=boid.pos.x, y=boid.pos.y;
+  if (boid._role==='pred' && nearest) {
+    api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(nearest.pos.x, nearest.pos.y); ctx.strokeStyle='hsla(' + (((config.hue+180)%360)) + ',100%,70%,0.15)'; ctx.lineWidth=1; ctx.stroke(); });
+  } else if (boid._role!=='pred' && nearest) {
+    // panic halo
+    const a = (0.10 + Math.max(0, (Rp-nd)/Rp)*0.20).toFixed(3);
+    api.addDrawable((ctx)=>{ const r=12; const g=ctx.createRadialGradient(x,y,2,x,y,22); g.addColorStop(0,'hsla(' + (config.hue) + ',100%,60%,'+(0.18)+')'); g.addColorStop(1,'hsla(' + (config.hue) + ',100%,60%,0.00)'); ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,22,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.arc(x,y, Math.max(10, Rp*0.45), 0, Math.PI*2); ctx.strokeStyle='hsla(' + (config.hue) + ',100%,70%,'+a+')'; ctx.lineWidth=1; ctx.stroke(); });
+  }
+}
+
+return steer.limit(boid.maxForce);` },
+
           // ——— Interaction‑Driven (Clicks/Drags) ———
           { id: 'click-gravity-well-strong', name: 'Click — Gravity Well (Strong)', code: `/**
   Gravity Well (Strong)
@@ -3517,6 +3592,10 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 kuramotoK: 0.06,
                 kuramotoOmegaBase: 0.02,
                 kuramotoOmegaJitter: 0.01,
+                // Predator–Prey defaults
+                predatorFrac: 0.12,
+                predatorBoost: 1.25,
+                preyPanic: 1.15,
                 rulesSelection: [],
                 configTab: 'settings',
                 ...urlParams
@@ -4010,6 +4089,16 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 mount('rdKill','RD Kill (k)',0.0,0.1,0.001,config.rdKill);
                 mount('rdDiffusion','RD Diffusion',0.5,1.5,0.01,config.rdDiffusion);
                 mount('rdDeposit','RD Deposit',0.0,1.0,0.01,config.rdDeposit);
+            })();
+            // Predator–Prey config
+            (function(){
+                const sec = document.createElement('div'); sec.className='config-item'; sec.dataset.novel='novel-predator-prey'; sec.style.display='none';
+                sec.innerHTML = '<h3>Novel — Predator–Prey</h3>';
+                novelWrap.appendChild(sec);
+                const mount = (id,label,min,max,step,val)=>{ const item=document.createElement('div'); item.className='config-item'; item.innerHTML='<label for="'+id+'">'+label+'</label>'; const input=document.createElement('input'); input.type='range'; input.min=min; input.max=max; input.step=step; input.value=val; input.id=id; const vs=document.createElement('span'); vs.textContent=' '+Number(val).toFixed(3); input.addEventListener('input',(e)=>{ const v=parseFloat(e.target.value); config[id]=v; vs.textContent=' '+v.toFixed(3); if (config.debug) updateAllURLParams(); }); input.addEventListener('change',(e)=>{ if(!config.debug) updateURL(id, parseFloat(e.target.value));}); item.appendChild(input); item.querySelector('label').appendChild(vs); sec.appendChild(item); };
+                mount('predatorFrac','Predator Fraction',0.0,0.5,0.01,config.predatorFrac);
+                mount('predatorBoost','Predator Speed Boost',0.5,2.0,0.01,config.predatorBoost);
+                mount('preyPanic','Prey Panic Speed',0.5,2.0,0.01,config.preyPanic);
             })();
             // Ensure initial visibility matches the active rule tab
             if (typeof updateNovelConfigVisibility === 'function') updateNovelConfigVisibility();

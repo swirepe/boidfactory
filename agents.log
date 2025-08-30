@@ -187,3 +187,4 @@ let's write a rule that visualizes the separation radius around each boid
 Let's write a rule that visualizes the perception radius, and have it gradually change color to the average color of the perceived boids
 a small settings block (e.g., Kuramoto K and ω jitter) to Config and have the rule read those from config with sensible defaults.
 make a new section called 'novel' and move the kuramoto rule there. Write one new novel rule with config panel when selected
+write a rule that marks some boids as predators (contrasting hue): they chase prey who flee from them
