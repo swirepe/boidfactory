@@ -3721,6 +3721,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 codePaneLeftWidth: null,
                 splitLeftRule: 'cohesion',
                 splitRightRule: 'separation',
+                // Rules tab UI
+                rulesShowDescriptions: true,
                 // Preset controls — persisted via URL
                 presetIncludeCore: true,
                 presetCount: 4,
@@ -4428,6 +4430,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px'; actions.style.alignItems='center'; actions.style.flexWrap='wrap';
             actions.innerHTML = `
                 <label><input type="checkbox" id="rules-include-core" ${config.presetIncludeCore ? 'checked' : ''}> Include core rules</label>
+                <label><input type="checkbox" id="rules-show-desc" ${config.rulesShowDescriptions ? 'checked' : ''}> Show descriptions</label>
                 <button id="rules-select-all" class="bar-btn">Select All</button>
                 <button id="rules-clear-all" class="bar-btn">Clear</button>
                 <button id="rules-apply" class="bar-btn" style="background: var(--primary-color); color: #fff; border: none;">Apply Selection</button>
@@ -4448,6 +4451,27 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 } catch (e) { /* noop */ }
             }
             const groups = categorizePresets();
+            // Helper to extract a short description from a preset code block
+            function getPresetDescription(p){
+                try {
+                    const src = String(p.code || '');
+                    const m = src.match(/\/\*\*([\s\S]*?)\*\//);
+                    if (m) {
+                        const raw = m[1].split('\n').map(s => s.replace(/^[\s\*]+/,'').trim());
+                        // Skip empty and tag lines; skip a leading title line that matches name
+                        let started = false;
+                        for (let line of raw){
+                            if (!line) continue;
+                            if (line.startsWith('@')) continue;
+                            if (!started) { started = true; if ((p.name||'').toLowerCase().startsWith(line.toLowerCase())) continue; }
+                            // Return first meaningful sentence
+                            return line.replace(/\s+/g,' ').trim();
+                        }
+                    }
+                } catch(e) {}
+                return '';
+            }
+
             Object.keys(groups).forEach(group => {
                 const box = document.createElement('div'); box.style.border='1px solid rgba(255,255,255,0.12)'; box.style.borderRadius='6px'; box.style.padding='6px 8px'; box.dataset.group='rules-box';
                 // Group header with per-group actions
@@ -4457,16 +4481,24 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 const btnNone = document.createElement('button'); btnNone.className='bar-btn'; btnNone.textContent='None'; btnNone.title='Clear group'; header.appendChild(btnNone);
                 box.appendChild(header);
                 // Items container with vertical spacing
-                const items = document.createElement('div'); items.style.display='flex'; items.style.flexDirection='column'; items.style.rowGap='4px';
+                const items = document.createElement('div'); items.style.display='flex'; items.style.flexDirection='column'; items.style.rowGap='6px';
                 groups[group].forEach(p => {
                     const id = `rules-${p.id}`;
-                    const label = document.createElement('label'); label.style.display='flex'; label.style.alignItems='center'; label.style.gap='6px'; label.style.fontSize='12px'; label.style.cursor='pointer'; label.dataset.preset='1'; label.dataset.name=(p.name||'').toLowerCase();
+                    const item = document.createElement('div'); item.dataset.preset='1'; item.style.display='flex'; item.style.flexDirection='column'; item.style.rowGap='2px'; item.style.padding='4px 0';
+                    // Top row: checkbox + name
+                    const label = document.createElement('label'); label.style.display='flex'; label.style.alignItems='center'; label.style.gap='6px'; label.style.fontSize='12px'; label.style.cursor='pointer'; label.dataset.name=(p.name||'').toLowerCase();
                     const cb = document.createElement('input'); cb.type='checkbox'; cb.value=p.id; cb.dataset.preset='1'; cb.id=id;
                     if (Array.isArray(config.rulesSelection) && config.rulesSelection.includes(p.id)) cb.checked = true;
                     cb.addEventListener('change', () => saveRulesSelection());
                     label.appendChild(cb);
                     const span = document.createElement('span'); span.textContent = p.name; label.appendChild(span);
-                    items.appendChild(label);
+                    item.appendChild(label);
+                    // Description row
+                    const descText = getPresetDescription(p);
+                    const desc = document.createElement('div'); desc.className = 'rule-desc'; desc.textContent = descText; desc.style.color = '#bbb'; desc.style.fontSize='11px'; desc.style.marginLeft='22px'; desc.style.display = config.rulesShowDescriptions && descText ? '' : 'none';
+                    desc.dataset.desc = (descText||'').toLowerCase();
+                    item.appendChild(desc);
+                    items.appendChild(item);
                 });
                 box.appendChild(items);
                 // Per-group listeners
@@ -4481,10 +4513,12 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 const boxes = Array.from(listHost.querySelectorAll('[data-group="rules-box"]'));
                 boxes.forEach(box => {
                     let visibleCount = 0;
-                    box.querySelectorAll('label[data-preset]').forEach(label => {
+                    box.querySelectorAll('div[data-preset] > label').forEach(label => {
                         const nm = label.dataset.name || '';
-                        const show = !qq || nm.includes(qq);
-                        label.style.display = show ? '' : 'none';
+                        const desc = label.nextSibling && label.nextSibling.classList && label.nextSibling.classList.contains('rule-desc') ? (label.nextSibling.dataset.desc||'') : '';
+                        const show = !qq || nm.includes(qq) || desc.includes(qq);
+                        const item = label.parentElement;
+                        item.style.display = show ? '' : 'none';
                         if (show) visibleCount++;
                     });
                     box.style.display = visibleCount ? '' : 'none';
@@ -4492,6 +4526,17 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             };
             const debounceFilter = debounce(() => filterRules(searchInput.value), 120);
             searchInput.addEventListener('input', debounceFilter);
+            // Show/hide descriptions
+            const showDescCb = rulesWrap.querySelector('#rules-show-desc');
+            if (showDescCb) {
+                showDescCb.addEventListener('change', (e) => {
+                    config.rulesShowDescriptions = !!e.target.checked;
+                    rulesWrap.querySelectorAll('.rule-desc').forEach(el => {
+                        el.style.display = (config.rulesShowDescriptions && (el.textContent||'').trim()) ? '' : 'none';
+                    });
+                    if (config.debug) updateAllURLParams(); else updateURL('rulesShowDescriptions', config.rulesShowDescriptions);
+                });
+            }
             // Rules tab actions
             rulesWrap.querySelector('#rules-select-all').addEventListener('click', () => {
                 rulesWrap.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => cb.checked = true);
