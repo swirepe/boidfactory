@@ -3890,7 +3890,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 */
 (function(){
   // 1) Seed a golden‑angle lattice (cached)
-  const N = 420; // number of seeds
+  const N = Math.max(60, Math.min(2000, Math.round(typeof config.phySeedCount === 'number' ? config.phySeedCount : 420)));
   const pad = 36; // canvas padding
   const twoPi = Math.PI * 2;
   const phi = Math.PI * (3 - Math.sqrt(5)); // golden angle ~ 2.39996
@@ -3944,8 +3944,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
   }
 
   // 3) Physarum‑style three‑sensor sampling
-  const sensorDist = 22;
-  const sensorAngle = 0.65; // radians
+  const sensorDist = (typeof config.phySensorDist === 'number') ? config.phySensorDist : 22;
+  const sensorAngle = (typeof config.phySensorAngle === 'number') ? config.phySensorAngle : 0.65; // radians
   const head = Math.atan2(boid.vel.y, boid.vel.x);
 
   function sampleField(px, py) {
@@ -5235,6 +5235,40 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     desc.dataset.desc = (descText||'').toLowerCase();
                     item.appendChild(desc);
 
+                    // Inline configuration: Weight slider for every rule (only when selected)
+                    (function(){
+                        const cfg = document.createElement('div');
+                        cfg.className = 'rule-inline-config rule-inline-weight';
+                        cfg.style.marginLeft = '22px';
+                        cfg.style.display = 'flex';
+                        cfg.style.flexDirection = 'column';
+                        cfg.style.gap = '2px';
+                        const keyName = (typeof sanitizeRuleName === 'function') ? sanitizeRuleName(p.name||'') : (p.name||'').toLowerCase();
+                        const weightKey = `${keyName}Weight`;
+                        if (typeof config[weightKey] !== 'number') config[weightKey] = 1.0;
+                        const line = document.createElement('div');
+                        line.className = 'config-item';
+                        line.style.display = 'flex'; line.style.alignItems = 'center'; line.style.gap = '6px';
+                        const lab = document.createElement('label'); lab.setAttribute('for', weightKey); lab.textContent = 'Weight'; lab.style.fontSize='11px'; lab.style.minWidth='150px';
+                        const input = document.createElement('input'); input.type='range'; input.min='0'; input.max='5'; input.step='0.1'; input.value=String(config[weightKey]); input.id=weightKey; input.style.flex='1';
+                        const vs = document.createElement('span'); vs.textContent = ' ' + Number(config[weightKey]).toFixed(2); vs.style.fontSize='11px';
+                        input.addEventListener('input', (e) => {
+                            const v = parseFloat(e.target.value);
+                            config[weightKey] = v; vs.textContent = ' ' + v.toFixed(2);
+                            // Live update if this rule is currently active
+                            const fn = (userFunctions||[]).find(f => f.name === keyName);
+                            if (fn) fn.weight = v;
+                            if (config.debug) updateAllURLParams();
+                        });
+                        input.addEventListener('change', (e) => { if (!config.debug) updateURL(weightKey, parseFloat(e.target.value)); });
+                        line.appendChild(lab); line.appendChild(input); line.appendChild(vs);
+                        cfg.appendChild(line);
+                        item.appendChild(cfg);
+                        // Show only when the rule is selected
+                        cfg.style.display = cb.checked ? 'flex' : 'none';
+                        cb.addEventListener('change', () => { cfg.style.display = cb.checked ? 'flex' : 'none'; });
+                    })();
+
                     // Inline Novel configuration: always show under Novel rules
                     const isNovel = /^novel-/.test(p.id) || /^Novel\b/i.test(p.name||'');
                     if (isNovel) {
@@ -5315,6 +5349,14 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                             mount('predatorFrac','Predator Fraction',0.0,0.5,0.01,(typeof config.predatorFrac==='number'?config.predatorFrac:0.15));
                             mount('predatorBoost','Speed Boost',0.5,2.0,0.01,(typeof config.predatorBoost==='number'?config.predatorBoost:1.3));
                             mount('preyPanic','Prey Panic',0.5,2.0,0.01,(typeof config.preyPanic==='number'?config.preyPanic:1.1));
+                        } else if (p.id === 'novel-physarum-phyllotaxis') {
+                            const hdr = document.createElement('div'); hdr.textContent = 'Physarum Phyllotaxis'; hdr.style.color='#bbb'; hdr.style.fontSize='11px'; cfg.appendChild(hdr);
+                            if (typeof config.phySensorDist !== 'number') config.phySensorDist = 22;
+                            if (typeof config.phySensorAngle !== 'number') config.phySensorAngle = 0.65;
+                            if (typeof config.phySeedCount !== 'number') config.phySeedCount = 420;
+                            mount('phySensorDist','Sensor Distance',6,60,1,config.phySensorDist);
+                            mount('phySensorAngle','Sensor Angle (rad)',0.1,1.2,0.01,config.phySensorAngle);
+                            mount('phySeedCount','Seed Count',60,2000,10,config.phySeedCount);
                         }
                         item.appendChild(cfg);
                     }
@@ -5322,8 +5364,26 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 });
                 box.appendChild(items);
                 // Per-group listeners
-                btnAll.addEventListener('click', () => { items.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => { if (cb.offsetParent !== null) cb.checked = true; }); saveRulesSelection(); });
-                btnNone.addEventListener('click', () => { items.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => { if (cb.offsetParent !== null) cb.checked = false; }); saveRulesSelection(); });
+                btnAll.addEventListener('click', () => {
+                    items.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => {
+                        if (cb.offsetParent !== null) {
+                            cb.checked = true;
+                            const item = cb.closest('[data-preset]');
+                            const w = item && item.querySelector('.rule-inline-weight'); if (w) w.style.display = 'flex';
+                        }
+                    });
+                    saveRulesSelection();
+                });
+                btnNone.addEventListener('click', () => {
+                    items.querySelectorAll('input[type="checkbox"][data-preset]').forEach(cb => {
+                        if (cb.offsetParent !== null) {
+                            cb.checked = false;
+                            const item = cb.closest('[data-preset]');
+                            const w = item && item.querySelector('.rule-inline-weight'); if (w) w.style.display = 'none';
+                        }
+                    });
+                    saveRulesSelection();
+                });
                 listHost.appendChild(box);
             });
             // Search filtering
@@ -6012,7 +6072,9 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             const ed = CodeMirror.fromTextArea(ta, { mode:'javascript', theme:'dracula', lineNumbers:true, lint:true, gutters:["CodeMirror-lint-markers"], extraKeys:{'Ctrl-Space':'autocomplete'}, hintOptions:{hint: editor => ruleHint(editor), completeSingle:false} });
             editors[name] = ed;
             // Compile function
-            const fnObj = { name, displayName: (displayLabel || (preset?.name) || name), weight: 1.0, updateBoid: null };
+            // Initialize weight from config if already set (e.g., from Rules tab inline sliders)
+            const initialWeight = (typeof config[`${name}Weight`] === 'number') ? config[`${name}Weight`] : 1.0;
+            const fnObj = { name, displayName: (displayLabel || (preset?.name) || name), weight: initialWeight, updateBoid: null };
             userFunctions.push(fnObj);
             // Hook tab behavior
             tabBtn.addEventListener('click', () => {
@@ -6051,7 +6113,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             ed.on('inputRead', (cm, change) => { if (!change.text) return; const ch = change.text.join(''); if (/^[\w\.$]$/.test(ch)) cm.showHint({ hint: ruleHint, completeSingle:false });});
             updateFunction(ed);
             // Rebuild config UI and split pickers
-            config[`${name}Weight`] = 1.0;
+            if (typeof config[`${name}Weight`] !== 'number') config[`${name}Weight`] = 1.0;
             setupConfigUI();
             if (setupCodePane._split) { setupCodePane._split.populateSelects(); setupCodePane._split.updateSplitMounts(); }
             // Activate newly created tab and ensure code pane is visible

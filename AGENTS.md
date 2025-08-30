@@ -111,3 +111,4 @@
  - Codex CLI Agent — signed on 2025-08-30, exposed pheromones to rule scope, updated docs/autocomplete, and reformatted pheromone‑related presets for readability.
  - Codex CLI Agent — signed on 2025-08-30, added Novel — L‑System Explorer (Epsilon‑Greedy) preset: combines L‑Systems + RL for emergent, striking visuals without glow.
  - Codex CLI Agent — signed on 2025-08-30, added Novel — Physarum Phyllotaxis Foragers (nature+nature): slime‑mold sensing + phyllotaxis seeds yield emergent lanes and spiral flows.
+ - Codex CLI Agent — signed on 2025-08-30, Rules tab now shows inline Weight for all rules; addRule honors existing weights; added inline config for Physarum Phyllotaxis.

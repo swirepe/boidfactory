@@ -226,3 +226,5 @@ This new rule should:
 [2025-08-30 00:28:42] fix pheromones scope for rules; format presets for readability (boidlabv1.2.html)
 [2025-08-30 00:36:46] add novel rule 'Novel — L-System Explorer (Epsilon-Greedy)' combining L-Systems + RL; emergent visuals without glow (boidlabv1.2.html)
 [2025-08-30 00:46:16] add novel rule 'Novel — Physarum Phyllotaxis Foragers' combining slime mold foraging + phyllotaxis; emergent lanes and spiral-driven flows without glow (boidlabv1.2.html)
+[2025-08-30 00:51:54] Rules tab: added inline Weight slider for all rules; wired addRule to honor existing weights. Added inline config for novel-physarum-phyllotaxis (sensor dist/angle, seed count) and made rule read config.
+[2025-08-30 00:53:37] Rules tab: show Weight only when selected; group All/None now toggles weight visibility accordingly.
