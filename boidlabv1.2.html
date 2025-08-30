@@ -3672,6 +3672,201 @@ const desired = Fg;
 if (typeof api!=='undefined'&&api&&api.addDrawable){ api.addDrawable((ctx)=>{ for(let i=1;i<=3;i++){ ctx.beginPath(); ctx.arc(Gc.x,Gc.y,i*40,0,Math.PI*2); ctx.strokeStyle='hsla(' + (((config.hue+120)%360)) + ',100%,70%,' + (0.12 - i*0.02) + ')'; ctx.lineWidth=1; ctx.stroke(); } }); }
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
+          { id: 'novel-lsystem-mdp-explorer', name: 'Novel — L‑System Explorer (Epsilon‑Greedy)', code: `/**
+  L‑System Explorer (Epsilon‑Greedy over a Branch Graph)
+  Fractal branch graph + epsilon‑greedy traversal yields shifting streams.
+
+  Concepts
+  ————————
+  • L‑System (CS): generate a fractal branching graph via turtle graphics.
+  • Epsilon‑Greedy (RL/AI): each boid picks its next edge with \n    occasional exploration; pheromone feedback encourages diversification.
+
+  Emergence
+  ————————
+  • Boids self‑organize into river‑like streams along evolving branches.\n    Competition and exploration produce shifting currents and surprising merges/splits.
+
+  Visual Language (no glow)
+  ———————————————
+  • Crisp skeleton of the fractal graph.\n  • Accented strokes along edges being traversed.\n  • Minimal arrowlets showing instantaneous direction.
+
+  Implementation Notes
+  ——————————————
+  • Precomputes an L‑system graph once and stores it in gameState._lsGraph.\n  • Each boid tracks a current edge (a→b) and progress parameter t∈[0,1].\n  • Next edge chosen epsilon‑greedily using pheromone density sampled at the edge midpoint.
+  @returns {Vector}
+*/
+(function(){
+  // 1) Build or cache the L‑system branch graph
+  if (!gameState._lsGraph || !gameState._lsGraph.nodes) {
+    const axiom = 'F';
+    const rules = { 'F': 'F[+F]F[-F]F' };
+    const iters = 4;
+    const ang = 25 * Math.PI / 180;
+    // Expand string
+    let s = axiom;
+    for (let i = 0; i < iters; i++) {
+      let next = '';
+      for (const ch of s) next += (rules[ch] || ch);
+      s = next;
+    }
+    // Turtle interpret to segments (unit space)
+    const stack = [];
+    let x = 0, y = 0, dir = -Math.PI/2; // start top‑down
+    const step = 1;
+    const segs = [];
+    for (const ch of s) {
+      if (ch === 'F') {
+        const nx = x + Math.cos(dir) * step;
+        const ny = y + Math.sin(dir) * step;
+        segs.push([x, y, nx, ny]);
+        x = nx; y = ny;
+      } else if (ch === '+') dir += ang;
+      else if (ch === '-') dir -= ang;
+      else if (ch === '[') stack.push([x, y, dir]);
+      else if (ch === ']' && stack.length) { const st = stack.pop(); x = st[0]; y = st[1]; dir = st[2]; }
+    }
+    // Normalize to canvas and center
+    let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+    for (const [x0,y0,x1,y1] of segs){ minX=Math.min(minX,x0,x1); minY=Math.min(minY,y0,y1); maxX=Math.max(maxX,x0,x1); maxY=Math.max(maxY,y0,y1); }
+    const w = Math.max(1e-6, maxX-minX), h = Math.max(1e-6, maxY-minY);
+    const pad = 40;
+    const sx = (gameState.width - pad*2) / w;
+    const sy = (gameState.height - pad*2) / h;
+    const scale = Math.min(sx, sy);
+    const ox = pad - minX * scale + (gameState.width - (w*scale + pad*2)) * 0.5;
+    const oy = pad - minY * scale + (gameState.height - (h*scale + pad*2)) * 0.5;
+    // Build nodes/edges with adjacency
+    const q = (v) => Math.round(v); // quantize for dedup
+    const keyOf = (px,py) => q(px)+'|'+q(py);
+    const nodeIndex = new Map();
+    const nodes = [];
+    function getNode(px, py) {
+      const k = keyOf(px, py);
+      if (nodeIndex.has(k)) return nodeIndex.get(k);
+      const idx = nodes.length; nodes.push({ x: px, y: py, edges: [] }); nodeIndex.set(k, idx); return idx;
+    }
+    const edges = [];
+    for (const [x0,y0,x1,y1] of segs) {
+      const ax = x0*scale + ox, ay = y0*scale + oy;
+      const bx = x1*scale + ox, by = y1*scale + oy;
+      const a = getNode(ax, ay), b = getNode(bx, by);
+      const id = edges.length;
+      const dx = bx-ax, dy = by-ay, len = Math.max(1e-6, Math.hypot(dx,dy));
+      const ex = dx/len, ey = dy/len;
+      edges.push({ a, b, ax, ay, bx, by, ex, ey, len, midx:(ax+bx)/2, midy:(ay+by)/2 });
+      nodes[a].edges.push(id); nodes[b].edges.push(id);
+    }
+    gameState._lsGraph = { nodes, edges };
+  }
+
+  const G = gameState._lsGraph;
+
+  // 2) Draw the skeleton once per frame (best‑effort)
+  if (!gameState._lsDrawStamp || performance.now() - gameState._lsDrawStamp > 12) {
+    gameState._lsDrawStamp = performance.now();
+    if (typeof api !== 'undefined' && api && api.addDrawable) {
+      const hue = (config.hue + 200) % 360;
+      api.addDrawable((ctx) => {
+        ctx.lineWidth = 0.8;
+        ctx.strokeStyle = 'hsla(' + hue + ',100%,60%,0.15)';
+        ctx.beginPath();
+        for (const e of G.edges) { ctx.moveTo(e.ax, e.ay); ctx.lineTo(e.bx, e.by); }
+        ctx.stroke();
+      });
+    }
+  }
+
+  // 3) Per‑boid epsilon‑greedy traversal on the graph
+  const EPS = 0.08; // exploration rate
+  const speed = boid.maxSpeed * 0.95;
+  // Ensure we have a current node/edge
+  if (typeof boid._lsNode !== 'number') {
+    // pick nearest node
+    let best=-1, bestD=Infinity;
+    for (let i=0;i<G.nodes.length;i++) { const n=G.nodes[i]; const d = Math.hypot(boid.pos.x-n.x, boid.pos.y-n.y); if (d < bestD) { bestD=d; best=i; } }
+    boid._lsNode = (best >= 0 ? best : 0);
+    boid._lsEdge = -1;
+    boid._lsT = 0;
+  }
+
+  function chooseNextEdge(fromNode) {
+    const out = G.nodes[fromNode].edges || [];
+    if (out.length === 0) return -1;
+    if (Math.random() < EPS) return out[Math.floor(Math.random()*out.length)];
+    // Greedy by negative pheromone (prefer lower mid‑cell value → explore)
+    let bestId = out[0], bestScore = Infinity;
+    for (const id of out) {
+      const e = G.edges[id];
+      const c = Math.floor(Math.max(0, Math.min(pheromones.cols - 1, e.midx / pheromones.cell)));
+      const r = Math.floor(Math.max(0, Math.min(pheromones.rows - 1, e.midy / pheromones.cell)));
+      const v = pheromones.grid[r * pheromones.cols + c] || 0;
+      if (v < bestScore) { bestScore = v; bestId = id; }
+    }
+    return bestId;
+  }
+
+  if (boid._lsEdge === -1) {
+    boid._lsEdge = chooseNextEdge(boid._lsNode);
+    boid._lsT = 0;
+  }
+  const e = (boid._lsEdge >= 0 ? G.edges[boid._lsEdge] : null);
+  if (!e) return new Vector();
+
+  // Direction of travel: from nearest endpoint forward
+  let ax=e.ax, ay=e.ay, bx=e.bx, by=e.by, ex=e.ex, ey=e.ey;
+  const distA = Math.hypot(boid.pos.x-ax, boid.pos.y-ay);
+  const distB = Math.hypot(boid.pos.x-bx, boid.pos.y-by);
+  if (distB < distA) { // reverse direction to head toward nearest
+    ax=e.bx; ay=e.by; bx=e.ax; by=e.ay; ex=-e.ex; ey=-e.ey;
+  }
+
+  // Advance along the edge parameter t
+  const step = Math.min(1, (speed / Math.max(1e-6, e.len)) * 1.2);
+  boid._lsT = Math.min(1, boid._lsT + step);
+  const tx = ax + (bx - ax) * boid._lsT;
+  const ty = ay + (by - ay) * boid._lsT;
+
+  // Steering: seek the param‑target with light curvature bias
+  const desired = new Vector(tx - boid.pos.x, ty - boid.pos.y).normalize().mult(speed);
+  // subtle lateral dither to avoid lock‑step
+  const jitter = (Math.random()-0.5) * 0.3;
+  desired.x += -ey * jitter; desired.y += ex * jitter;
+
+  // When reaching end, select a new edge from that node
+  if (boid._lsT >= 0.999) {
+    const atB = Math.hypot(boid.pos.x - bx, boid.pos.y - by) < 24 ? 1 : 0;
+    const node = atB ? (nodeIndexOf(bx,by)) : (nodeIndexOf(ax,ay));
+    boid._lsNode = node;
+    boid._lsEdge = chooseNextEdge(node);
+    boid._lsT = 0;
+  }
+
+  function nodeIndexOf(px,py){
+    let best=-1, bestD=Infinity; for (let i=0;i<G.nodes.length;i++){ const n=G.nodes[i]; const d=Math.hypot(px-n.x, py-n.y); if(d<bestD){bestD=d; best=i;} } return best>=0?best:0;
+  }
+
+  // Visual accents: highlight current edge segment and a small arrowlet
+  if (typeof api !== 'undefined' && api && api.addDrawable) {
+    const x = boid.pos.x, y = boid.pos.y;
+    api.addDrawable((ctx) => {
+      ctx.save();
+      // active edge
+      ctx.lineWidth = 2.0;
+      ctx.strokeStyle = 'hsla(' + (boid.hue) + ',100%,62%,0.45)';
+      ctx.beginPath(); ctx.moveTo(ax, ay); ctx.lineTo(bx, by); ctx.stroke();
+      // arrowlet
+      const L = 14;
+      ctx.lineWidth = 1.4; ctx.strokeStyle = 'hsla(' + (((config.hue+40)%360)) + ',100%,70%,0.35)';
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x + ex*L, y + ey*L); ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  // Pheromone feedback at target position
+  if (typeof api !== 'undefined' && api && api.depositTrail) api.depositTrail(tx, ty, 0.8);
+
+  return Vector.sub(desired, boid.vel).limit(boid.maxForce * 0.95);
+})();` },
+
           { id: 'physics-coulomb-gas', name: 'Physics — Coulomb Gas', code: `/**
   Coulomb Gas (Mutual Repulsion)
   Neighbors repel with 1/r potential; damped by distance. Produces gas-like spreading.

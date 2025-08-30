@@ -224,3 +224,4 @@ This new rule should:
 [2025-08-30 00:13:27] move rule-specific sliders beneath labels in Rules tab (boidlabv1.2.html)
 [2025-08-30 00:19:02] in boidlabv1.2.html, always show the novel configuration under the rule in the rules tab
 [2025-08-30 00:28:42] fix pheromones scope for rules; format presets for readability (boidlabv1.2.html)
+[2025-08-30 00:36:46] add novel rule 'Novel — L-System Explorer (Epsilon-Greedy)' combining L-Systems + RL; emergent visuals without glow (boidlabv1.2.html)
