@@ -104,5 +104,6 @@
 - Codex CLI Agent — signed on 2025-08-29, added Kuramoto Aurora settings (K, ω base, ω jitter) and wired rule to read them from config.
 - Codex CLI Agent — signed on 2025-08-29, added Novel category, moved Kuramoto rule there, and added Novel — Reaction‑Diffusion Trails with a config panel that appears when selected.
  - Codex CLI Agent — signed on 2025-08-29, added Novel — Predator–Prey Pursuit with a config panel (fraction/boost/panic) shown when the rule is active.
- - Codex CLI Agent — signed on 2025-08-30, expanded Help overlay with editors/rules docs and enriched Info overlay technical documentation in boidlabv1.2.html.
+- Codex CLI Agent — signed on 2025-08-30, expanded Help overlay with editors/rules docs and enriched Info overlay technical documentation in boidlabv1.2.html.
+- Codex CLI Agent — signed on 2025-08-30, extended Rule API (spawn/destroy/shake), documented Info overlay, and added Novel — Predator–Prey Genesis rule with birth/death mechanics.
  - Codex CLI Agent — signed on 2025-08-30, added Header/Subheader config fields with defaults and live updates.

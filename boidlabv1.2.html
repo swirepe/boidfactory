@@ -583,7 +583,10 @@
          * @param {typeof Vector} Vector
          * @param {{
          *   depositTrail: (x:number, y:number, amount?:number) => void,
-         *   addDrawable: (fn: (ctx: CanvasRenderingContext2D, gs: GameState) => void) => void
+         *   addDrawable: (fn: (ctx: CanvasRenderingContext2D, gs: GameState) => void) => void,
+         *   spawnBoid: (x:number, y:number, opts?:{ hue?:number, size?:number, role?:'pred'|'prey', vel?:{x:number,y:number} }) => void,
+         *   destroyBoid: (b: Boid) => void,
+         *   shake: (amplitude:number, durationMs:number) => void
          * }} api - Optional helpers for visuals/overlays.
          * @returns {Vector}
          */
@@ -623,6 +626,12 @@
             decay: 0.98,
         };
 
+        // Pending ops requested by rules (applied safely after updates)
+        const _pendingSpawns = [];
+        const _pendingKills = new Set();
+        // Lightweight screen-shake state
+        const _shake = { endTime: 0, amplitude: 0 };
+
         const RuleAPI = {
             depositTrail(x, y, amount = 1) {
                 if (!pheromones.enabled || !pheromones.grid) return;
@@ -638,6 +647,21 @@
                 if (d < 1 && Math.random() > d) return;
                 drawables.push(fn);
                 if (d > 1 && Math.random() < (d - 1)) drawables.push(fn);
+            },
+            spawnBoid(x, y, opts = {}) {
+                if (typeof x !== 'number' || typeof y !== 'number') return;
+                _pendingSpawns.push({ x, y, opts });
+            },
+            destroyBoid(b) {
+                if (b && typeof b === 'object') _pendingKills.add(b);
+            },
+            shake(amplitude = 6, durationMs = 220) {
+                const now = performance.now();
+                // If a shake is in progress, keep the stronger one
+                const rem = Math.max(0, _shake.endTime - now);
+                const cur = rem > 0 ? _shake.amplitude : 0;
+                _shake.amplitude = Math.max(cur, Math.max(0, amplitude));
+                _shake.endTime = Math.max(_shake.endTime, now + Math.max(0, durationMs|0));
             }
         };
 
@@ -3397,6 +3421,164 @@ if (typeof api!=='undefined'&&api&&api.depositTrail) api.depositTrail(boid.pos.x
 if (typeof api!=='undefined'&&api&&api.addDrawable){ const x=boid.pos.x,y=boid.pos.y; api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+desired.x*10,y+desired.y*10); ctx.strokeStyle='hsla(' + (((config.hue+90)%360)) + ',100%,70%,0.25)'; ctx.lineWidth=1.5; ctx.stroke(); }); }
 return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
 
+          { id: 'novel-predator-prey-genesis', name: 'Novel — Predator–Prey Genesis', code: `/**
+  Predator–Prey Genesis (Birth, Death, and Dazzling Choreography)
+  A living system: predators hunt and convert energy, prey flee and multiply.
+  Birth and death are explicit via api.spawnBoid() and api.destroyBoid().
+
+  Parameters
+  - predatorFrac: initial predator fraction (≈ 0.12)
+  - predatorBoost: predator speed multiplier (≈ 1.25)
+  - preyPanic: prey speed multiplier when a predator is near (≈ 1.15)
+
+  Visual Language (no glow effects)
+  - Capture: faceted starburst + expanding ripple rings, brief screen shake
+  - Birth: nested petals and offset twin rings
+  - Motion: crisp pursuit rays (predators), skitter arcs (prey), heat trails
+
+  Mechanics
+  - Energy: predators slowly starve; eating grants a burst; death on depletion.
+            prey trickle-charge; reproduction consumes energy and splits momentum.
+  - Spawn cap: honors config.maxBoids to prevent runaway growth.
+  @returns {Vector}
+*/
+(function(){
+  // 1) Initialize role/energy once per boid
+  const frac = (typeof config.predatorFrac==='number') ? Math.max(0, Math.min(0.9, config.predatorFrac)) : 0.12;
+  if (!boid._ppgInit) {
+    boid._role = (Math.random() < frac) ? 'pred' : 'prey';
+    boid._e = boid._role==='pred' ? 0.9 : 0.7; // energy
+    boid._age = 0;
+    boid._ppgInit = 1;
+  }
+
+  const pBoost = (typeof config.predatorBoost==='number') ? Math.max(0.5, Math.min(2.0, config.predatorBoost)) : 1.25;
+  const panic = (typeof config.preyPanic==='number') ? Math.max(0.5, Math.min(2.0, config.preyPanic)) : 1.15;
+  const role = boid._role || 'prey';
+  boid._age++;
+
+  // 2) Role-based neighborhood query
+  let target = null;
+  let nearestD = Infinity;
+  for (const o of neighbors) {
+    if (o === boid) continue;
+    const d = Vector.dist(boid.pos, o.pos);
+    if (role==='pred') {
+      if ((o._role||'prey')==='prey' && d < nearestD) { nearestD = d; target = o; }
+    } else {
+      if ((o._role||'prey')==='pred' && d < nearestD) { nearestD = d; target = o; }
+    }
+  }
+
+  // 3) Steering
+  let desired = new Vector();
+  const maxSpd = boid.maxSpeed;
+  if (role==='pred') {
+    // Pursue the nearest prey or wander toward mouse
+    if (target) {
+      desired = Vector.sub(target.pos, boid.pos).normalize().mult(maxSpd * pBoost);
+      // Faceted pursuit ray
+      if (typeof api!=='undefined'&&api&&api.addDrawable && Math.random() < 0.65) {
+        const x=boid.pos.x,y=boid.pos.y; const v=desired.clone().normalize().mult(18);
+        api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+v.x,y+v.y); ctx.strokeStyle='hsla('+(((config.hue+180)%360))+',100%,60%,0.28)'; ctx.lineWidth=1.5; ctx.stroke(); });
+      }
+    } else if (mouse && mouse.pos) {
+      desired = Vector.sub(mouse.pos, boid.pos).normalize().mult(maxSpd * 0.8);
+    }
+    // Starvation pressure
+    boid._e -= 0.0018 + 0.0008 * (desired.mag()/Math.max(1e-3, maxSpd));
+  } else {
+    // Flee the nearest predator or drift with subtle curvature
+    if (target) {
+      desired = Vector.sub(boid.pos, target.pos).normalize().mult(maxSpd * panic);
+      // Skitter arc visualization
+      if (typeof api!=='undefined'&&api&&api.addDrawable && Math.random() < 0.5) {
+        const x=boid.pos.x,y=boid.pos.y; const v=desired.clone().normalize();
+        api.addDrawable((ctx)=>{ ctx.beginPath(); ctx.arc(x,y,10, Math.atan2(v.y,v.x)-0.8, Math.atan2(v.y,v.x)+0.2); ctx.strokeStyle='hsla('+((config.hue)%360)+',100%,70%,0.22)'; ctx.lineWidth=1; ctx.stroke(); });
+      }
+      // Sprint drains a bit
+      boid._e -= 0.0007;
+    } else {
+      // Gentle meander
+      const jitter = Vector.random2D().mult(0.4);
+      desired = Vector.add(boid.vel.clone().normalize().mult(maxSpd*0.6), jitter).limit(maxSpd*0.7);
+      boid._e += 0.0009; // graze
+    }
+  }
+
+  // 4) Capture (pred close to prey)
+  if (role==='pred' && target && nearestD < Math.max(10, boid.size + 6)) {
+    // Energy transfer and visuals
+    boid._e = Math.min(2.0, boid._e + 0.6);
+    if (typeof api!=='undefined'&&api) {
+      api.destroyBoid(target);
+      // Dazzling starburst + ripple (no glow)
+      const cx = (boid.pos.x + target.pos.x)/2, cy = (boid.pos.y + target.pos.y)/2; const hue=((config.hue+20)%360);
+      api.addDrawable((ctx)=>{
+        ctx.save(); ctx.translate(cx,cy);
+        // Starburst
+        ctx.strokeStyle='hsla('+hue+',100%,70%,0.35)';
+        for(let i=0;i<12;i++){ const a=i*(Math.PI*2/12); const L=12+(i%3)*6; ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(Math.cos(a)*L, Math.sin(a)*L); ctx.lineWidth=(i%3===0?2:1); ctx.stroke(); }
+        // Ripple rings
+        for(let r=10;r<=30;r+=10){ ctx.beginPath(); ctx.arc(0,0,r,0,Math.PI*2); ctx.strokeStyle='hsla('+((hue+260)%360)+',100%,60,'+(0.22-r*0.004)+')'; ctx.lineWidth=1; ctx.stroke(); }
+        ctx.restore();
+      });
+      api.depositTrail(cx, cy, 2.0);
+      api.shake(7, 180);
+      // Small chance to bud a new predator
+      if ((gameState.boids||[]).length < (config.maxBoids||1200) && Math.random()<0.25) {
+        const dir = Vector.random2D().mult(1.5);
+        api.spawnBoid(cx, cy, { role:'pred', hue:((config.hue+180)%360), vel:{x:dir.x,y:dir.y}, size: boid.size*0.95 });
+      }
+    }
+  }
+
+  // 5) Predator death on starvation (dust motes)
+  if (role==='pred' && boid._e <= 0) {
+    if (typeof api!=='undefined'&&api) {
+      const x=boid.pos.x, y=boid.pos.y, hue=((config.hue+180)%360);
+      api.addDrawable((ctx)=>{ for(let i=0;i<8;i++){ const a=Math.random()*Math.PI*2; const L=4+Math.random()*10; ctx.beginPath(); ctx.moveTo(x,y); ctx.lineTo(x+Math.cos(a)*L, y+Math.sin(a)*L); ctx.strokeStyle='hsla('+hue+',100%,60%,0.18)'; ctx.lineWidth=1; ctx.stroke(); }});
+      api.shake(4, 120);
+      api.destroyBoid(boid);
+    }
+    return new Vector();
+  }
+
+  // 6) Prey reproduction when energized and not overcrowded
+  if (role==='prey' && boid._e >= 1.2 && Math.random()<0.04) {
+    // Local density check: count prey neighbors within small radius
+    let closePrey = 0; for (const o of neighbors) { if ((o._role||'prey')==='prey' && Vector.dist(boid.pos,o.pos)<28) closePrey++; }
+    if (closePrey < 6 && (gameState.boids||[]).length < (config.maxBoids||1200)) {
+      const childVel = Vector.random2D().mult(boid.maxSpeed*0.3);
+      const nx = boid.pos.x + childVel.x*2, ny = boid.pos.y + childVel.y*2;
+      if (typeof api!=='undefined'&&api) {
+        api.spawnBoid(nx, ny, { role:'prey', hue: ((config.hue+ (Math.random()*30-15))%360), vel:{x:childVel.x,y:childVel.y}, size: Math.max(3, boid.size*0.9) });
+        // Birth visuals: twin rings + petals
+        api.addDrawable((ctx)=>{
+          ctx.strokeStyle='hsla('+((config.hue)%360)+',100%,70%,0.25)';
+          for(let i=1;i<=2;i++){ ctx.beginPath(); ctx.arc(nx, ny, 6*i, 0, Math.PI*2); ctx.lineWidth=1; ctx.stroke(); }
+          ctx.strokeStyle='hsla('+((config.hue+40)%360)+',100%,70%,0.22)';
+          for(let i=0;i<5;i++){ const a=i*(2*Math.PI/5); ctx.beginPath(); ctx.arc(nx+Math.cos(a)*5, ny+Math.sin(a)*5, 3.6, a-0.7, a+0.7); ctx.stroke(); }
+        });
+        api.depositTrail(nx, ny, 1.2);
+      }
+      // Energy split between parent/child
+      boid._e *= 0.6;
+    }
+  }
+
+  // 7) A bit of trail for both roles
+  if (typeof api!=='undefined'&&api&&api.depositTrail) {
+    api.depositTrail(boid.pos.x, boid.pos.y, role==='pred' ? 0.6 : 0.3);
+  }
+
+  // 8) Compute steering force
+  const steer = Vector.sub(desired, boid.vel).limit(boid.maxForce * (role==='pred' ? 1.0 : 0.9));
+  // Subtle role tint
+  boid.hue = role==='pred' ? ((config.hue+180)%360) : (config.hue%360);
+  return steer;
+})();` },
+
           { id: 'cs-bfs-frontier', name: 'CS — BFS Frontier Expansion', code: `/**
   BFS Frontier Expansion (Stylized)
   Expand a frontier from a source; steer outward in waves.
@@ -3856,6 +4038,8 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 codePaneLeftWidth: null,
                 splitLeftRule: 'cohesion',
                 splitRightRule: 'separation',
+                // Safety cap for dynamic birth mechanics
+                maxBoids: 1500,
                 // Rules tab UI
                 rulesShowDescriptions: true,
                 // Preset controls — persisted via URL
@@ -4862,6 +5046,9 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
               '<ul>' +
               '<li><code>api.addDrawable((ctx, gs) =&gt; {...})</code>: Enqueue a lightweight draw step after boids render.</li>' +
               '<li><code>api.depositTrail(x, y, amount=1)</code>: Add to a decaying pheromone grid for heatmap/trails.</li>' +
+              '<li><code>api.spawnBoid(x, y, opts)</code>: Request creation of a boid at <code>(x,y)</code>. <code>opts</code> may include <code>{hue, size, role, vel:{x,y}}</code>.</li>' +
+              '<li><code>api.destroyBoid(boid)</code>: Request removal of a specific boid (safe; applied after the update step).</li>' +
+              '<li><code>api.shake(amplitude, durationMs)</code>: Trigger a tasteful screen shake (world translation) with decaying amplitude.</li>' +
               '</ul>' +
 
               '<h3>Simulation Pipeline</h3>' +
@@ -4915,7 +5102,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
               '  @param {Object} config\n' +
               '  @param {Mouse} mouse\n' +
               '  @param {typeof Vector} Vector\n' +
-              '  @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void}} api\n' +
+              '  @param {{depositTrail:(x:number,y:number,a?:number)=>void, addDrawable:(fn:Function)=>void, spawnBoid:(x:number,y:number,opts?:object)=>void, destroyBoid:(b:Boid)=>void, shake:(amp:number,dur:number)=>void}} api\n' +
               '  @returns {Vector}\n' +
               '*/\n' +
               '//function rule(boid, gameState, neighbors, config, mouse, Vector, api) {\n' +
@@ -4968,7 +5155,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     'config',
                     'mouse', 'mouse.pos.x', 'mouse.pos.y', 'mouse.down',
                     'Vector', 'Vector.sub', 'Vector.dist', 'Vector.random2D',
-                    'api', 'api.depositTrail', 'api.addDrawable',
+                    'api', 'api.depositTrail', 'api.addDrawable', 'api.spawnBoid', 'api.destroyBoid', 'api.shake',
                     'add()', 'sub()', 'mult()', 'div()', 'mag()', 'normalize()', 'limit()', 'heading()', 'clone()',
                     'return new Vector(0, 0)', 'const v = new Vector(0, 0)'
                 ];
@@ -5729,9 +5916,44 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     }
                 }
             }
+
+            // Apply deferred deletions (by identity)
+            if (_pendingKills.size) {
+                gameState.boids = gameState.boids.filter(b => !(_pendingKills.has(b)));
+                _pendingKills.clear();
+            }
+            // Apply deferred spawns (respect maxBoids)
+            if (_pendingSpawns.length) {
+                const cap = Math.max(0, Number(config.maxBoids) || 0) || Infinity;
+                while (_pendingSpawns.length && gameState.boids.length < cap) {
+                    const req = _pendingSpawns.shift();
+                    const nb = new Boid(req.x, req.y);
+                    const o = req.opts || {};
+                    if (typeof o.hue === 'number') nb.hue = ((o.hue % 360) + 360) % 360;
+                    if (typeof o.size === 'number') nb.size = Math.max(1, o.size);
+                    if (o.vel && typeof o.vel.x === 'number' && typeof o.vel.y === 'number') {
+                        nb.vel.x = o.vel.x; nb.vel.y = o.vel.y;
+                    }
+                    if (o.role === 'pred' || o.role === 'prey') nb._role = o.role;
+                    gameState.boids.push(nb);
+                }
+                // If queue still has spawns but we hit the cap, drop extras to prevent unbounded growth
+                if (gameState.boids.length >= cap) _pendingSpawns.length = 0;
+            }
         }
 
         function draw() {
+            // Screen shake transform
+            const now = performance.now();
+            const dur = Math.max(0, _shake.endTime - now);
+            if (dur > 0) {
+                const t = dur / 300; // normalize against a nominal 300ms
+                const amp = _shake.amplitude * t * t; // ease-out quad
+                const ox = (Math.random() * 2 - 1) * amp;
+                const oy = (Math.random() * 2 - 1) * amp;
+                ctx.save();
+                ctx.translate(ox, oy);
+            }
             ctx.fillStyle = 'rgba(26, 26, 26, 0.25)';
             ctx.fillRect(0, 0, gameState.width, gameState.height);
             // Draw pheromone heatmap (lightweight grid rendering)
@@ -5793,6 +6015,10 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 ctx.fillStyle = '#ccc';
                 ctx.font = '12px monospace';
                 ctx.fillText(`drawables: ${drawables.length}`, 10, 18);
+                ctx.restore();
+            }
+            // Restore post-shake
+            if (dur > 0) {
                 ctx.restore();
             }
         }

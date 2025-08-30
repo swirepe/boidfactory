@@ -209,3 +209,14 @@ expand the help overlay to explain more about the editors and rules
 [2025-08-30 01:05] Tweaked active/inactive styles for editor and settings tabs: clearer hover, brighter active state, subtle inactive dimming.
 [2025-08-30 01:12] Styled darker unchecked checkboxes; aligned Select All / Clear / Apply in a single non-wrapping row; prevented editor toolbar overflow.
 [2025-08-30 01:20] Added Quadtree overlays: per-frame query visit fills and decayed hot regions heatmap; config toggles; stats for visits and heat; instrumentation in quadtree.query().
+[2025-08-30 01:28] Added rule preset 'Novel — Predator–Prey Lifecycle' with birth/death mechanics using api.spawnBoid/api.killBoid and energy/age dynamics.
+[2025-08-30 23:56:04] in boidlabv1.2.html,
+- extend the api to allow the creation and destruction of boids
+- extend the api to allow screen shake
+- document the api in the info overlay
+- write a novel predator/prey rule with birth and death mechanics.  
+This new rule should:
+- be of any length. 
+- be visually stunning, pushing the visuals as far as possible without glow effects
+- be written in a clear, informative, well-documented style
+
