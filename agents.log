@@ -207,3 +207,4 @@ expand the help overlay to explain more about the editors and rules
 [2025-08-30 00:55] Refined button CSS to exclude .tab-button so editor tabs keep their original look.
 [2025-08-30 01:00] Config tabs styled like tabs again; Rules Apply is a primary button; All/None moved to right in group headers.
 [2025-08-30 01:05] Tweaked active/inactive styles for editor and settings tabs: clearer hover, brighter active state, subtle inactive dimming.
+[2025-08-30 01:12] Styled darker unchecked checkboxes; aligned Select All / Clear / Apply in a single non-wrapping row; prevented editor toolbar overflow.

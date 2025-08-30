@@ -349,7 +349,6 @@
             margin: 0 auto;
         }
         .chart-toggle {
-            position: absolute;
             bottom: 5px;
             left: 5px;
             background-color: rgba(0,0,0,0.5);
@@ -414,6 +413,29 @@
         .form-input:focus,
         input[type="text"]:focus, input[type="number"]:focus, input[type="color"]:focus,
         select:focus { border-color: var(--primary-color); box-shadow: 0 0 0 2px rgba(255,255,255,0.05); }
+
+        /* Custom checkbox styling: darker when unchecked */
+        input[type="checkbox"] {
+            appearance: none;
+            -webkit-appearance: none;
+            width: 14px; height: 14px;
+            border: 1px solid rgba(255,255,255,0.25);
+            border-radius: 3px;
+            background: #161616;
+            display: inline-block; position: relative;
+            cursor: pointer;
+        }
+        input[type="checkbox"]:hover { border-color: rgba(255,255,255,0.4); }
+        input[type="checkbox"]:checked { background: hsl(var(--hue), 100%, 55%); border-color: hsl(var(--hue), 100%, 60%); }
+        input[type="checkbox"]:checked::after { content: ''; position: absolute; left: 3px; top: 1px; width: 6px; height: 9px; border: 2px solid #fff; border-top: 0; border-left: 0; transform: rotate(45deg); }
+
+        /* Rules actions row (avoid wrapping the 3 main actions) */
+        .rules-actions-row { display: flex; gap: 8px; flex-wrap: nowrap; overflow-x: auto; padding-bottom: 2px; }
+
+        /* Prevent editor toolbar from overflowing the canvas */
+        #code-pane { overflow: hidden; }
+        .tab-content { overflow: auto; }
+        .editor-bar { flex-wrap: wrap; }
     </style>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/codemirror.min.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/5.65.2/theme/dracula.min.css">
@@ -4481,12 +4503,16 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
             const searchRow = document.createElement('div'); searchRow.style.display='flex'; searchRow.style.gap='8px'; searchRow.style.marginBottom='6px';
             searchRow.innerHTML = `<input id="rules-search" class="form-input" type="text" placeholder="Search rules…" style="flex:1;">`;
             rulesWrap.appendChild(searchRow);
-            const actions = document.createElement('div'); actions.style.display='flex'; actions.style.gap='8px'; actions.style.alignItems='center'; actions.style.flexWrap='wrap';
+            const actions = document.createElement('div'); actions.style.display='flex'; actions.style.flexDirection='column'; actions.style.gap='6px';
             actions.innerHTML = `
-                <label><input type="checkbox" id="rules-show-desc" ${config.rulesShowDescriptions ? 'checked' : ''}> Show descriptions</label>
-                <button id="rules-select-all" class="bar-btn">Select All</button>
-                <button id="rules-clear-all" class="bar-btn">Clear</button>
-                <button id="rules-apply" class="primary-btn">Apply Selection</button>
+                <div class="rules-actions-top" style="display:flex;align-items:center;gap:8px;">
+                    <label><input type="checkbox" id="rules-show-desc" ${config.rulesShowDescriptions ? 'checked' : ''}> Show descriptions</label>
+                </div>
+                <div class="rules-actions-row">
+                    <button id="rules-select-all" class="bar-btn">Select All</button>
+                    <button id="rules-clear-all" class="bar-btn">Clear</button>
+                    <button id="rules-apply" class="primary-btn">Apply Selection</button>
+                </div>
             `;
             rulesWrap.appendChild(actions);
             const listHost = document.createElement('div'); listHost.style.display = 'grid'; listHost.style.gridTemplateColumns = 'repeat(auto-fit, minmax(240px, 1fr))'; listHost.style.gap='6px 12px'; rulesWrap.appendChild(listHost);
@@ -4818,7 +4844,6 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
               '//}\n' +
               '</pre>' +
               '<ul>' +
-              '<li><b>'
               '<li><b>Description rule</b>: the Rules tab shows the second meaningful JSDoc line. Use line 1 for the title, line 2 for a concise summary.</li>' +
               '<li><b>Purity</b>: avoid mutating global state; compute a steering vector and return it.</li>' +
               '<li><b>Visuals</b>: use <code>api.addDrawable()</code> for lightweight draws and <code>api.depositTrail()</code> for trails; keep per-frame work small.</li>' +
