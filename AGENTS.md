@@ -91,15 +91,17 @@
  - Codex CLI Agent — signed on 2025-08-29, added Nature Pack bundle (presetBundle=nature-pack).
  - Codex CLI Agent — signed on 2025-08-29, added Rules tab in Config overlay with grouped checklist and Apply Selection.
  - Codex CLI Agent — signed on 2025-08-29, enhanced Rules tab with search/filter and per‑group Select/None actions.
- - Codex CLI Agent — signed on 2025-08-29, styled Settings/Rules buttons into tabs in the Config overlay.
+- Codex CLI Agent — signed on 2025-08-29, styled Settings/Rules buttons into tabs in the Config overlay.
+ - Codex CLI Agent — signed on 2025-08-29, expanded Help overlay with sections on editors, per-editor toolbar, split view, novel config panels, rule lifecycle, and URL tips.
  - Codex CLI Agent — signed on 2025-08-29, added notes clarifying difference between Random Presets and Preset Bundles.
  - Codex CLI Agent — signed on 2025-08-29, filled Physics category with 6 presets (Inverse‑Square Gravity, Coulomb Gas, Harmonic Grid, Lorenz Drift, Wave Interference, Gyroscopic Precession).
  - Codex CLI Agent — signed on 2025-08-29, added Physics Pack bundle (presetBundle=physics-pack).
  - Codex CLI Agent — signed on 2025-08-29, fixed categorization regex so Physics rules don’t get misclassified under AI/ML/CS.
  - Codex CLI Agent — signed on 2025-08-29, added Physics to Random Presets theme options and theme filter.
- - Codex CLI Agent — signed on 2025-08-29, added ML — K-Means Colorize (Online) preset to color boids by cluster.
- - Codex CLI Agent — signed on 2025-08-29, added Visual — Separation Radius preset to show separation zones around boids.
- - Codex CLI Agent — signed on 2025-08-29, added Visual — Perception Color Blend preset (perception rings + hue blending to neighbors).
- - Codex CLI Agent — signed on 2025-08-29, added Kuramoto Aurora settings (K, ω base, ω jitter) and wired rule to read them from config.
- - Codex CLI Agent — signed on 2025-08-29, added Novel category, moved Kuramoto rule there, and added Novel — Reaction‑Diffusion Trails with a config panel that appears when selected.
- - Codex CLI Agent — signed on 2025-08-29, added Novel — Predator–Prey Pursuit with a config panel (fraction/boost/panic) shown when the rule is active.
+- Codex CLI Agent — signed on 2025-08-29, added ML — K-Means Colorize (Online) preset to color boids by cluster.
+- Codex CLI Agent — signed on 2025-08-29, added Visual — Separation Radius preset to show separation zones around boids.
+- Codex CLI Agent — signed on 2025-08-29, added Visual — Perception Color Blend preset (perception rings + hue blending to neighbors).
+- Codex CLI Agent — signed on 2025-08-29, added Kuramoto Aurora settings (K, ω base, ω jitter) and wired rule to read them from config.
+- Codex CLI Agent — signed on 2025-08-29, added Novel category, moved Kuramoto rule there, and added Novel — Reaction‑Diffusion Trails with a config panel that appears when selected.
+- Codex CLI Agent — signed on 2025-08-29, added Novel — Predator–Prey Pursuit with a config panel (fraction/boost/panic) shown when the rule is active.
+ - Codex CLI Agent — signed on 2025-08-30, expanded Help overlay with editors/rules docs and enriched Info overlay technical documentation in boidlabv1.2.html.

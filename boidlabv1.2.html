@@ -4406,8 +4406,29 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                 <button class="close-button">&times;</button>
                 <h2>Boids Simulation</h2>
                 <p>This is an interactive simulation of flocking behavior, inspired by Craig Reynolds' Boids algorithm.</p>
+
+                <h3>Editors</h3>
+                <p>The code pane hosts live-editable rule functions. Changes hot-reload with a brief success/error flash on the active tab.</p>
+                <ul>
+                    <li><b>Docking</b>: <code>Code</code> toggles visibility. Use the icons to dock <code>bottom</code>, <code>left</code>, or <code>maximize</code>.</li>
+                    <li><b>Left dock</b>: Drag the thin right-edge handle to resize; width persists. A temporary <code>Code</code> button appears near overlays when hidden.</li>
+                    <li><b>Split view</b>: In maximized mode, toggle the two‑pane view and choose which rules appear left/right via the dropdowns.</li>
+                    <li><b>Tabs</b>: Each rule has a tab. Runtime errors briefly enable a small red dot (fallback) on the tab; the rule outputs zero force until it stabilizes.</li>
+                    <li><b>Editor toolbar</b>: Preset dropdown + <code>Fill</code> (replace editor with preset), <code>Rename</code>, <code>Delete</code>, <code>New</code> (from selected preset).</li>
+                    <li><b>Autocomplete</b>: Press <code>Ctrl-Space</code> for hints including in‑scope names (Vector, boid, gameState, mouse, config, api, …).</li>
+                </ul>
+
+                <h3>Rules</h3>
+                <ul>
+                    <li><b>Signature</b>: <code>function rule(boid, gameState, neighbors, config, mouse, Vector, api) ⇒ Vector</code>. Return a steering vector each frame.</li>
+                    <li><b>Weights</b>: Rule contributions are scaled by sliders in <code>Config → Settings</code> (e.g., <code>cohesionWeight</code>). New rules add their own weight.</li>
+                    <li><b>Order</b>: Rules execute in the order of tabs. Rename keeps IDs unique; deleting a rule removes its weight slider.</li>
+                    <li><b>Presets & bundles</b>: Use <code>Config → Rules</code> to search/filter groups and apply themed selections or bundles. Optional “Include core rules”.</li>
+                    <li><b>Visuals</b>: Rules may call <code>api.addDrawable(fn)</code> to draw lightweight effects, and <code>api.depositTrail(x,y)</code> for heatmap trails.</li>
+                </ul>
+
                 <h3>URL Parameters</h3>
-                <p>Most settings persist via the URL. Values are JSON-parsed, so booleans and numbers work as expected.</p>
+                <p>Most settings persist via the URL. Values are JSON‑parsed, so booleans and numbers work as expected.</p>
                 <ul>
                     <li><code>hue</code>: number (theme hue)</li>
                     <li><code>boidCount</code>, <code>boidSize</code>, <code>boidSizeVariance</code>, <code>boidShape</code> (triangle|circle|oval|ring)</li>
@@ -4433,6 +4454,7 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
                     <li><code>${urlBase}?presetBundle=optimization-pack</code></li>
                     <li><code>${urlBase}?debug=true&amp;hue=320&amp;boidCount=300</code></li>
                 </ul>
+
                 <h3>Change Log</h3>
                 <p>
                     v1.7 - Added visual success/error indicators for live code reloading.<br>
@@ -4450,9 +4472,11 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
         function setupInfoUI() {
             const container = document.getElementById('info-overlay');
             if (!container) return;
-            container.innerHTML = '<button class="close-button">&times;</button>' +
+            container.innerHTML = '' +
+              '<button class="close-button">&times;</button>' +
               '<h2>Technical Info</h2>' +
-              '<h3>Rule Function Signature</h3>' +
+
+              '<h3>Rule Function</h3>' +
               '<pre style="white-space:pre-wrap;font-size:12px;line-height:1.4">' +
               'function rule(boid, gameState, neighbors, config, mouse, Vector, api) {\n' +
               '  // Return a Vector steering force.\n' +
@@ -4460,24 +4484,52 @@ return Vector.sub(desired, boid.vel).limit(boid.maxForce);` },
               '  return new Vector(0,0);\n' +
               '}' +
               '</pre>' +
-              '<h3>Rule API</h3>' +
               '<ul>' +
-              '<li><code>api.addDrawable((ctx, gameState) =&gt; {...})</code>: enqueue a canvas draw for this frame.</li>' +
-              '<li><code>api.depositTrail(x, y, amount=1)</code>: add to pheromone grid (fading heatmap).</li>' +
+              '<li><b>In scope</b>: <code>boid</code>, <code>neighbors</code>, <code>gameState</code>, <code>config</code>, <code>mouse</code>, <code>Vector</code>, <code>api</code>.</li>' +
+              '<li><b>Return</b>: Always a <code>Vector</code>; non‑Vector results are ignored.</li>' +
               '</ul>' +
-              '<h3>Render Pipeline (per frame)</h3>' +
+
+              '<h3>APIs</h3>' +
+              '<ul>' +
+              '<li><code>api.addDrawable((ctx, gs) =&gt; {...})</code>: Enqueue a lightweight draw step after boids render.</li>' +
+              '<li><code>api.depositTrail(x, y, amount=1)</code>: Add to a decaying pheromone grid for heatmap/trails.</li>' +
+              '</ul>' +
+
+              '<h3>Simulation Pipeline</h3>' +
               '<ol>' +
-              '<li>update(): build quadtree, decay pheromones, run rules (which can register drawables).</li>' +
-              '<li>draw(): background, pheromone heatmap, quadtree (optional), boids, custom drawables, HUD.</li>' +
+              '<li><b>Update</b>: rebuild quadtree → decay pheromones → for each boid, accumulate rule forces.</li>' +
+              '<li><b>Draw</b>: background → pheromone heatmap → optional quadtree → boids → drawables → HUD.</li>' +
               '</ol>' +
-              '<h3>Visual Density</h3>' +
-              '<p><code>config.visualDensity</code> in [0,2]: if &lt;1, visuals are probabilistically thinned; if &gt;1, some visuals are duplicated to increase density.</p>' +
-              '<h3>Performance Notes</h3>' +
-              '<ul><li>Prefer simple strokes/fills; avoid large loops in each drawable.</li>' +
-              '<li>Use density slider for heavy visuals; avoid synchronous layout reads in drawables.</li>' +
+
+              '<h3>Model & Data</h3>' +
+              '<ul>' +
+              '<li><b>Boid</b>: position/velocity/acceleration with <code>maxSpeed</code>, <code>maxForce</code>, <code>hue</code>, and <code>size</code>.</li>' +
+              '<li><b>Neighbors</b>: quadtree query within <code>perceptionRadius</code>; wraparound edges by default.</li>' +
+              '<li><b>Pheromones</b>: grid of floats with decay; cell size tuned for performance (<code>depositTrail</code> writes cells).</li>' +
+              '<li><b>Drawables</b>: frame‑scoped list; rendered after boids. <code>visualDensity</code> controls thinning/duplication.</li>' +
               '</ul>' +
-              '<h3>Coordinate System</h3>' +
-              '<p>Origin at top-left; +x to right, +y down. Boids wrap at edges.</p>';
+
+              '<h3>Stats & Diagnostics</h3>' +
+              '<ul>' +
+              '<li><b>FPS</b>: recent frames/sec; target 60.</li>' +
+              '<li><b>Update Time</b>: per‑frame update cost (ms) with mean/stddev.</li>' +
+              '<li><b>Drawables/Frame</b>: number of custom draw calls enqueued.</li>' +
+              '<li><b>Flock Coherence</b>: spiral plot of neighbor alignment/spacing.</li>' +
+              '<li><b>Mean Direction</b>: average heading ± stdev bands (toggleable).</li>' +
+              '</ul>' +
+
+              '<h3>Error Handling</h3>' +
+              '<p>When a rule throws during runtime, it temporarily falls back to zero output and marks its tab with a small red dot. Successful reloads flash the tab briefly.</p>' +
+
+              '<h3>Performance Tips</h3>' +
+              '<ul>' +
+              '<li>Prefer simple, bounded drawables; avoid O(n²) work inside <code>addDrawable</code> callbacks.</li>' +
+              '<li>Use <code>visualDensity</code> to scale effect intensity for slower machines.</li>' +
+              '<li>Keep rule math side‑effect free; accumulate into a steering vector and return.</li>' +
+              '</ul>' +
+
+              '<h3>Coordinates</h3>' +
+              '<p>Origin at top‑left; +x right, +y down. Boids wrap around edges.</p>';
             container.querySelector('.close-button').onclick = () => container.classList.remove('visible');
         }
 

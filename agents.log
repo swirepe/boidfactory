@@ -188,3 +188,5 @@ Let's write a rule that visualizes the perception radius, and have it gradually 
 a small settings block (e.g., Kuramoto K and ω jitter) to Config and have the rule read those from config with sensible defaults.
 make a new section called 'novel' and move the kuramoto rule there. Write one new novel rule with config panel when selected
 write a rule that marks some boids as predators (contrasting hue): they chase prey who flee from them
+expand the help overlay to explain more about the editors and rules
+[2025-08-30 00:00] in boidlabv1.2.html, expand the help overlay to contain information about the editors and rules.  Expand the info overlay with more documentation.
